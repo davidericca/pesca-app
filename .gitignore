@@ -1,0 +1,8 @@
+# impostazioni locali dell'editor/assistente: non vanno pubblicate
+.claude/
+
+# file di sistema e temporanei
+.DS_Store
+Thumbs.db
+*.log
+.vercel
