@@ -292,8 +292,11 @@ function tideChartHTML(day, isToday){
     svg += `<text x="${L - 5}" y="${(+y + 3.5).toFixed(1)}" class="tc-axis" text-anchor="end">${fmtM(v)}</text>`;
   }
   svg += `<text x="${L - 5}" y="${T - 6}" class="tc-axis" text-anchor="end">m</text>`;
-  for(let h = 0; h <= 24; h += 4){
-    svg += `<text x="${xOf(h).toFixed(1)}" y="${H - 9}" class="tc-axis" text-anchor="${h === 0 ? 'start' : h === 24 ? 'end' : 'middle'}">${pad2(h)}:00</text>`;
+  /* una tacchetta ogni ora (più lunga ogni 2), con l'ora scritta ogni 2 ore */
+  for(let h = 0; h <= 24; h++){
+    const x = xOf(h).toFixed(1), even = h % 2 === 0;
+    svg += `<line x1="${x}" x2="${x}" y1="${pb}" y2="${pb + (even ? 6 : 3.5)}" class="tc-tick"/>`;
+    if(even) svg += `<text x="${x}" y="${H - 8}" class="tc-axis" text-anchor="middle">${h}</text>`;
   }
 
   const sun = (h, label, up) => {

@@ -504,3 +504,4 @@ nav.tabbar{
 .tide-legend i{display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:4px;}
 .tide-chart .tc-fish.big{fill:#2F6F8A; opacity:.9;}
 .tide-chart .tc-fish.small{fill:#8FB0C0; opacity:.9;}
+.tide-chart .tc-tick{stroke:var(--ink); stroke-width:1.2;}
