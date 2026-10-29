@@ -68,7 +68,18 @@ function _migrateFromLocalStorageIfNeeded(){
   }catch(e){ return null; }
 }
 
+/* Chiede al browser di non cancellare i dati in automatico (poco spazio, pulizia
+   dei siti inattivi). Il browser può rifiutare: in quel caso non cambia nulla. */
+function _requestPersistentStorage(){
+  try{
+    if(navigator.storage && navigator.storage.persist){
+      navigator.storage.persist().catch(()=>{});
+    }
+  }catch(e){ /* non supportato: si va avanti normalmente */ }
+}
+
 async function loadData(){
+  _requestPersistentStorage();
   try{
     let stored = await _idbGet(IDB_KEY);
     if(!stored){
