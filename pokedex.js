@@ -65,11 +65,9 @@ function renderPokedex(){
   const species = allSpecies();
 
   const unlockedCount = unlockedSpeciesCount();
-  const pct = Math.round(unlockedCount/species.length*100);
 
   summary.innerHTML = `
-    <div class="summary-card"><div class="num">${unlockedCount}/${species.length}</div><div class="lbl">Specie sbloccate</div></div>
-    <div class="summary-card"><div class="num">${pct}%</div><div class="lbl">Completamento</div></div>
+    <div class="summary-card"><div class="num">${unlockedCount}/${species.length}</div><div class="lbl">Specie catturate</div></div>
   `;
 
   /* Toggle vista griglia / cronologia / galleria */
