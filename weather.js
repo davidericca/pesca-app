@@ -299,9 +299,9 @@ function _naiveMs(t){ // "YYYY-MM-DDTHH:MM" locale -> ms su scala "naive" (confr
 }
 function _naiveStr(ms){ return new Date(ms).toISOString().slice(0,16); }
 
-/* Marea dalla serie oraria del livello del mare: stato, prossimi massimo e minimo, livello sopra il minimo del giorno. */
-function analyzeTide(h, dateStr, hourFloat){
-  if(!h || !h.time || !h.sea_level_height_msl) return null;
+/* Massimi e minimi di marea (alti/bassi alternati) dalla serie oraria del livello del mare: {ms, level, type}. */
+function tideExtrema(h){
+  if(!h || !h.time || !h.sea_level_height_msl) return [];
   const y = h.sea_level_height_msl, ts = h.time.map(_naiveMs);
   const extrema = [];
   for(let i=1; i<y.length-1; i++){
@@ -316,6 +316,14 @@ function analyzeTide(h, dateStr, hourFloat){
     if(last && last.type === type) continue;                      // tiene solo massimi e minimi alternati
     extrema.push({ms: ts[i] + off*3600000, level: b - 0.25*(a - c)*off, type});
   }
+  return extrema;
+}
+
+/* Marea dalla serie oraria del livello del mare: stato, prossimi massimo e minimo, livello sopra il minimo del giorno. */
+function analyzeTide(h, dateStr, hourFloat){
+  if(!h || !h.time || !h.sea_level_height_msl) return null;
+  const y = h.sea_level_height_msl;
+  const extrema = tideExtrema(h);
   const target = _naiveMs(dateStr + 'T00:00') + hourFloat * 3600000;
   const next = extrema.find(e=>e.ms > target) || null;
   const prevE = [...extrema].reverse().find(e=>e.ms <= target) || null;

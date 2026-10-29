@@ -477,3 +477,28 @@ nav.tabbar{
 }
 
 ::selection{background:var(--copper); color:#fff;}
+
+/* ===== grafico marea ===== */
+.tide-wrap{margin:12px 0 4px;}
+.tide-chart{width:100%; height:auto; display:block;}
+.tide-chart .tc-night{fill:#E3DCCB;}
+.tide-chart .tc-day{fill:#CFE3EC;}
+.tide-chart .tc-grid{stroke:rgba(27,36,32,.10); stroke-width:1;}
+.tide-chart .tc-zero{stroke:rgba(27,36,32,.35); stroke-width:1;}
+.tide-chart .tc-base{stroke:var(--ink); stroke-width:1.5;}
+.tide-chart .tc-axis{fill:var(--ink-soft); font-family:var(--font-mono); font-size:9.5px;}
+.tide-chart .tc-curve{fill:none; stroke:var(--teal); stroke-width:2.5; stroke-linecap:round;}
+.tide-chart .tc-sunline{stroke:#D5A93C; stroke-width:1; stroke-dasharray:3 3; opacity:.8;}
+.tide-chart .tc-sun{fill:#D5A93C;}
+.tide-chart .tc-sunlabel{fill:#B98A1E; font-family:var(--font-mono); font-size:10px; font-weight:600;}
+.tide-chart .tc-dot.high, .tide-legend .tc-dot.high{fill:#4C93C8; background:#4C93C8;}
+.tide-chart .tc-dot.low, .tide-legend .tc-dot.low{fill:#B94A48; background:#B94A48;}
+.tide-chart .tc-dot{stroke:#fff; stroke-width:1.5;}
+.tide-chart .tc-time{font-family:var(--font-mono); font-size:10.5px; font-weight:700;}
+.tide-chart .tc-time.high{fill:#3A7FB3;}
+.tide-chart .tc-time.low{fill:#B94A48;}
+.tide-chart .tc-fish{fill:#6F95AB; opacity:.75;}
+.tide-chart .tc-now{stroke:#7BC043; stroke-width:2; opacity:.8;}
+.tide-chart .tc-nowtri{fill:#7BC043;}
+.tide-legend{display:flex; gap:14px; flex-wrap:wrap; font-family:var(--font-mono); font-size:10.5px; color:var(--ink-soft); margin-top:4px;}
+.tide-legend i{display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:4px;}
