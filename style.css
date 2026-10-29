@@ -453,10 +453,6 @@ nav.tabbar{
 #toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
 
 /* ===== pokedex ===== */
-.progress-bar-outer{background:var(--card); border:1px solid var(--line); border-radius:20px; height:14px; overflow:hidden;}
-.progress-bar-inner{background:linear-gradient(90deg, var(--teal), var(--success)); height:100%; border-radius:20px; transition:width .4s ease;}
-
-
 .timeline-item{
   display:flex; gap:12px; align-items:center; background:var(--card); border:1px solid var(--line);
   border-radius:14px; padding:10px 12px; margin-bottom:10px;

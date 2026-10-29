@@ -67,10 +67,6 @@ function renderPokedex(){
   const unlockedCount = unlockedSpeciesCount();
   const pct = Math.round(unlockedCount/species.length*100);
 
-  /* Barra completamento pokedex */
-  document.getElementById('pokedexProgressBar').style.width = pct + '%';
-  document.getElementById('pokedexProgressLabel').textContent = `${unlockedCount}/${species.length} specie sbloccate (${pct}%)`;
-
   summary.innerHTML = `
     <div class="summary-card"><div class="num">${unlockedCount}/${species.length}</div><div class="lbl">Specie sbloccate</div></div>
     <div class="summary-card"><div class="num">${pct}%</div><div class="lbl">Completamento</div></div>
