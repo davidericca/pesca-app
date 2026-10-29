@@ -267,24 +267,28 @@ function tideChartHTML(day, isToday){
   if(!t) return '';
   const W = 360, H = 206, L = 38, R = 10, T = 36, B = 28;
   const pw = W - L - R, pb = H - B;
-  const dataTop = T + 12, dataBot = pb - 34;            // la fascia sotto è per i pesci
+  const dataTop = T + 12, dataBot = pb - 38;            // la fascia sotto è per i pesci
   const xOf = h => L + h / 24 * pw;
 
+  /* altezza misurata dal livello più basso della giornata (0): il livello assoluto del modello non è affidabile,
+     le differenze nell'arco della giornata sì */
   const lv = t.pts.map(p=>p[1]).concat(t.extrema.map(e=>e.level));
-  const mn = Math.min(...lv), mx = Math.max(...lv);
-  const span = Math.max(1, mx - mn + 0.3);               // scala minima 1 m: una marea piccola resta piccola
-  const lo = (mn + mx) / 2 - span / 2, hi = lo + span;
-  const yOf = v => dataBot - (v - lo) / (hi - lo) * (dataBot - dataTop);
-  const fmtM = v => v.toFixed(1).replace('.', ',').replace('-0,0', '0,0');
+  const base = Math.min(...lv);
+  const range = Math.max(...lv) - base;
+  const top = Math.max(0.4, Math.ceil((range + 0.05) * 10) / 10);
+  const step = top <= 0.6 ? 0.1 : top <= 1.2 ? 0.2 : 0.5;
+  const lo = -top * 0.12, hi = top * 1.05;
+  const yOf = v => dataBot - (v - base - lo) / (hi - lo) * (dataBot - dataTop);
+  const fmtM = v => v.toFixed(1).replace('.', ',');
 
   const sr = hhmmToHours(day.sunrise), ss = hhmmToHours(day.sunset);
   let svg = `<svg class="tide-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Grafico della marea della giornata">`;
   svg += `<rect x="${L}" y="${T}" width="${pw}" height="${pb - T}" class="tc-night"/>`;
   if(sr != null && ss != null) svg += `<rect x="${xOf(sr).toFixed(1)}" y="${T}" width="${(xOf(ss) - xOf(sr)).toFixed(1)}" height="${pb - T}" class="tc-day"/>`;
 
-  for(let v = Math.ceil(lo / 0.5) * 0.5; v <= hi + 1e-9; v += 0.5){
-    const y = yOf(v).toFixed(1);
-    svg += `<line x1="${L}" x2="${W - R}" y1="${y}" y2="${y}" class="${Math.abs(v) < 1e-9 ? 'tc-zero' : 'tc-grid'}"/>`;
+  for(let k = 0; k * step <= hi + 1e-9; k++){
+    const v = k * step, y = yOf(base + v).toFixed(1);
+    svg += `<line x1="${L}" x2="${W - R}" y1="${y}" y2="${y}" class="${k === 0 ? 'tc-zero' : 'tc-grid'}"/>`;
     svg += `<text x="${L - 5}" y="${(+y + 3.5).toFixed(1)}" class="tc-axis" text-anchor="end">${fmtM(v)}</text>`;
   }
   svg += `<text x="${L - 5}" y="${T - 6}" class="tc-axis" text-anchor="end">m</text>`;
@@ -317,15 +321,17 @@ function tideChartHTML(day, isToday){
     svg += `<text x="${x.toFixed(1)}" y="${(e.type === 'high' ? y - 9 : y + 17).toFixed(1)}" class="tc-time ${e.type}" text-anchor="middle">${fmtHourMin(e.hour)}</text>`;
   });
 
-  /* pesci: per ogni blocco di 2 ore, 3 pesci se l'indice è tra i migliori, 1 se è buono, nessuno altrimenti */
+  /* pesci: uno per ogni blocco di 2 ore, in fila sul fondo. Grande = ore migliori della giornata, piccolo = ore discrete,
+     nessun pesce = ore poco buone. Stessa soglia dell'indice di pesca delle finestre migliori. */
   const byHour = {};
   day.hours.forEach(h=>{ byHour[h.hour] = h.score; });
-  const fish = (cx, cy, s) => `<g transform="translate(${cx.toFixed(1)} ${cy.toFixed(1)}) scale(${s})" class="tc-fish"><ellipse cx="0" cy="0" rx="8" ry="4.5"/><path d="M6 0 L13 -5 L13 5Z"/></g>`;
+  const fish = (cx, cy, s, cls) => `<g transform="translate(${cx.toFixed(1)} ${cy.toFixed(1)}) scale(${s})" class="tc-fish ${cls}"><ellipse cx="-2" cy="0" rx="8" ry="4.5"/><path d="M4 0 L11 -5 L11 5Z"/></g>`;
+  svg += `<text x="${L - 5}" y="${pb - 11}" class="tc-axis" text-anchor="end">pesca</text>`;
   for(let b = 0; b < 24; b += 2){
     const sc = Math.max(byHour[b] ?? 0, byHour[b + 1] ?? 0);
     const cx = xOf(b + 1), cy = pb - 14;
-    if(sc >= day.thr) svg += fish(cx - 6, cy - 6, 0.62) + fish(cx + 6, cy - 6, 0.62) + fish(cx, cy + 5, 0.62);
-    else if(sc >= Math.max(50, day.thr - 15)) svg += fish(cx, cy, 0.72);
+    if(sc >= day.thr) svg += fish(cx, cy, 1.05, 'big');
+    else if(sc >= Math.max(50, day.thr - 15)) svg += fish(cx, cy, 0.78, 'small');
   }
 
   if(isToday){
@@ -335,8 +341,8 @@ function tideChartHTML(day, isToday){
   svg += `<line x1="${L}" x2="${W - R}" y1="${pb}" y2="${pb}" class="tc-base"/><line x1="${L}" x2="${L}" y1="${T}" y2="${pb}" class="tc-base"/></svg>`;
 
   return `<div class="tide-wrap">${svg}
-    <div class="tide-legend"><span><i class="tc-dot high"></i> alta</span><span><i class="tc-dot low"></i> bassa</span><span>🐟 più pesci = ore migliori</span></div>
-    <div class="fc-note" style="margin-top:6px;">Marea da modello marino (Open-Meteo): in Mediterraneo l'escursione è di pochi decimetri e gli orari sono una stima, non quelli ufficiali.</div>
+    <div class="tide-legend"><span><i class="tc-dot high"></i> alta</span><span><i class="tc-dot low"></i> bassa</span><span>🐟 grande = ore migliori, piccolo = discrete</span></div>
+    <div class="fc-note" style="margin-top:6px;">L'altezza parte da 0 = livello più basso della giornata. Marea da modello marino (Open-Meteo): in Mediterraneo l'escursione è di pochi decimetri e gli orari sono una stima, non quelli ufficiali.</div>
   </div>`;
 }
 
