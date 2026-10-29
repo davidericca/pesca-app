@@ -1,6 +1,6 @@
 /* =====================================================================
-   POKEDEX.JS — Database specie, statistiche per specie, gamification
-   (XP, livelli, medaglie), rendering del Pokedex e scheda specie
+   POKEDEX.JS — Database specie, statistiche per specie,
+   rendering del Pokedex e scheda specie
    (con approfondimento Wikipedia).
    ===================================================================== */
 
@@ -37,39 +37,8 @@ function allSpecies(){
 
 function speciesById(id){ return allSpecies().find(s=>s.id===id); }
 
-/* ===================== GAMIFICATION: XP, LIVELLI, MEDAGLIE ===================== */
-
-const XP_BY_RARITY = {'comune':50, 'non comune':100, 'raro':200};
-
-const LEVELS = [
-  {name:'Principiante', xp:0},
-  {name:'Pescatore', xp:300},
-  {name:'Pescatore Esperto', xp:700},
-  {name:'Maestro di Pesca', xp:1200},
-  {name:'Cacciatore di Trofei', xp:1700},
-  {name:'Leggenda del Mare', xp:2200},
-];
-
 function unlockedSpeciesCount(){
   return allSpecies().filter(s=>speciesStats(s.id).unlocked).length;
-}
-
-function xpForSpecies(s){
-  return XP_BY_RARITY[s.rarity] || 50;
-}
-
-function totalXP(){
-  return allSpecies().filter(s=>speciesStats(s.id).unlocked).reduce((sum,s)=>sum+xpForSpecies(s), 0);
-}
-
-function currentLevelInfo(){
-  const xp = totalXP();
-  let levelIdx = 0;
-  for(let i=0;i<LEVELS.length;i++){ if(xp>=LEVELS[i].xp) levelIdx = i; }
-  const current = LEVELS[levelIdx];
-  const next = LEVELS[levelIdx+1] || null;
-  const progressPct = next ? Math.min(100, Math.round((xp-current.xp)/(next.xp-current.xp)*100)) : 100;
-  return {xp, levelIdx, levelName:current.name, levelNum:levelIdx+1, totalLevels:LEVELS.length, next, progressPct};
 }
 
 /* ===================== POKEDEX ===================== */
@@ -97,17 +66,6 @@ function renderPokedex(){
 
   const unlockedCount = unlockedSpeciesCount();
   const pct = Math.round(unlockedCount/species.length*100);
-  const lvl = currentLevelInfo();
-
-  /* Livello pescatore */
-  document.getElementById('levelCard').innerHTML = `
-    <div class="lvl-top">
-      <div class="lvl-name">${lvl.levelName}</div>
-      <div class="lvl-num">Livello ${lvl.levelNum}/${lvl.totalLevels}</div>
-    </div>
-    <div class="xp-bar-outer"><div class="xp-bar-inner" style="width:${lvl.progressPct}%;"></div></div>
-    <div class="xp-label">${lvl.xp} XP${lvl.next ? ' · ' + (lvl.next.xp - lvl.xp) + ' XP al livello successivo' : ' · livello massimo raggiunto'}</div>
-  `;
 
   /* Barra completamento pokedex */
   document.getElementById('pokedexProgressBar').style.width = pct + '%';
@@ -187,7 +145,7 @@ function renderPokedexTimeline(container){
         ${thumb}
         <div class="tl-info">
           <div class="tl-name">${s.name}</div>
-          <div class="tl-date">sbloccata il ${fmtDate(stat.firstDate)} · +${xpForSpecies(s)} XP</div>
+          <div class="tl-date">sbloccata il ${fmtDate(stat.firstDate)}</div>
         </div>
       </div>`;
   }).join('');
@@ -197,7 +155,6 @@ function showUnlockAnimation(speciesId){
   const s = speciesById(speciesId);
   if(!s) return;
   const stat = speciesStats(speciesId);
-  const xp = xpForSpecies(s);
   const visual = stat.photo
     ? `<img src="${stat.photo}" alt="">`
     : `<div class="unlock-glyph">${s.glyph}</div>`;
@@ -205,7 +162,6 @@ function showUnlockAnimation(speciesId){
     <div class="unlock-burst">Nuova specie sbloccata!</div>
     ${stat.photo ? `<div class="unlock-glyph">${visual}</div>` : visual}
     <div class="unlock-name">${s.name}</div>
-    <div class="unlock-xp">+${xp} XP</div>
   `;
   const confettiLayer = document.getElementById('confettiLayer');
   const colors = ['#C97C3D','#1C6E8C','#4C7A5E','#EFE6D5','#A85A28'];

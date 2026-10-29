@@ -452,18 +452,7 @@ nav.tabbar{
 }
 #toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
 
-/* ===== gamification pokedex ===== */
-.level-card{
-  background:linear-gradient(135deg, var(--teal-deep), #145253);
-  color:var(--bg); border-radius:var(--radius); padding:16px 18px; margin-top:14px;
-}
-.level-card .lvl-top{display:flex; justify-content:space-between; align-items:baseline;}
-.level-card .lvl-name{font-family:var(--font-display); font-size:17px; font-weight:600;}
-.level-card .lvl-num{font-family:var(--font-mono); font-size:10.5px; opacity:0.75; text-transform:uppercase; letter-spacing:.05em;}
-.level-card .xp-bar-outer{background:rgba(239,230,213,0.18); border-radius:20px; height:8px; margin-top:10px; overflow:hidden;}
-.level-card .xp-bar-inner{background:var(--copper); height:100%; border-radius:20px; transition:width .4s ease;}
-.level-card .xp-label{font-family:var(--font-mono); font-size:10px; opacity:0.75; margin-top:6px;}
-
+/* ===== pokedex ===== */
 .progress-bar-outer{background:var(--card); border:1px solid var(--line); border-radius:20px; height:14px; overflow:hidden;}
 .progress-bar-inner{background:linear-gradient(90deg, var(--teal), var(--success)); height:100%; border-radius:20px; transition:width .4s ease;}
 
@@ -481,7 +470,6 @@ nav.tabbar{
 .unlock-glyph{font-size:60px; margin:10px 0;}
 .unlock-glyph img{width:120px; height:120px; object-fit:cover; border-radius:20px; border:3px solid var(--copper);}
 .unlock-name{font-family:var(--font-display); font-size:22px; font-weight:700;}
-.unlock-xp{font-family:var(--font-mono); font-size:12.5px; color:var(--success); margin-top:6px; font-weight:700;}
 #confettiLayer{position:absolute; inset:0; pointer-events:none; overflow:hidden;}
 .confetti-piece{
   position:absolute; top:-10px; width:8px; height:8px; opacity:0.9;
