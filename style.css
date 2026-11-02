@@ -222,7 +222,7 @@ main{flex:1; padding-bottom:120px;}
 .fc-day .w{font-size:13px; font-weight:600; opacity:.8;}
 .fc-day .n{font-size:18px; font-weight:800;}
 .fc-day .i{font-size:17px;}
-.fc-day .x{font-size:13.5px; font-weight:800; background:var(--bg-alt); color:var(--teal-deep); border-radius:10px; padding:0 7px;}
+.fc-day .x{font-size:11px; font-weight:800; background:var(--bg-alt); color:var(--teal-deep); border-radius:10px; padding:0 7px;}
 .fc-day.active .x{background:rgba(255,255,255,0.25); color:#fff;}
 .fc-head{margin-bottom:10px;}
 .fc-sun{font-size:15px; color:var(--ink-soft);}
@@ -272,7 +272,7 @@ main{flex:1; padding-bottom:120px;}
 .df-day .df-temp .max{font-weight:800; color:var(--teal-deep);}
 .df-day .df-temp .min{color:var(--ink-soft);}
 .df-day .df-wave{font-size:13px; color:var(--ink-soft); margin-top:4px;}
-.df-day .df-fish{font-size:14px; font-weight:800; color:#fff; border-radius:12px; padding:2px 8px; margin-top:7px; white-space:nowrap;}
+.df-day .df-fish{font-size:11px; font-weight:800; color:#fff; border-radius:12px; padding:2px 8px; margin-top:7px; white-space:nowrap;}
 .df-day .df-rating{font-size:12.5px; font-weight:700; margin-top:3px;}
 
 /* calendario giorni migliori */
@@ -509,8 +509,9 @@ nav.tabbar{
 .tide-chart .tc-time.low{fill:#C2503C;}
 .tide-chart .tc-fish{fill:#2F6DB5;}
 .tide-chart .tc-band{fill:#F29B38;}
-.tide-chart .tc-band.l3{opacity:.36;}
-.tide-chart .tc-band.l2{opacity:.26;}
+.tide-chart .tc-band.l4{opacity:.46;}
+.tide-chart .tc-band.l3{opacity:.34;}
+.tide-chart .tc-band.l2{opacity:.24;}
 .tide-chart .tc-band.l1{opacity:.16;}
 .tide-legend .tc-swatch{display:inline-block; width:14px; height:10px; border-radius:3px; background:rgba(242,155,56,.45); margin-right:4px;}
 .tide-chart .tc-now{stroke:#2E9D6B; stroke-width:2; opacity:.85;}
@@ -526,11 +527,15 @@ nav.tabbar{
 /* fasce di pesca migliori */
 .win-list{display:flex; flex-direction:column; gap:8px; margin-top:12px;}
 .win-row{display:flex; align-items:center; gap:12px; background:var(--bg); border-radius:16px; padding:10px 14px; border-left:5px solid var(--copper);}
+.win-row.l4{background:rgba(242,155,56,0.30);}
 .win-row.l3{background:rgba(242,155,56,0.20);}
 .win-row.l2{background:rgba(242,155,56,0.12);}
 .win-row.l1{background:var(--bg);}
 .win-row.past{opacity:.5;}
-.win-fish{font-size:17px; min-width:58px; letter-spacing:1px;}
+.win-fish{font-size:15px; min-width:66px; letter-spacing:0;}
+.win-main{display:flex; flex-direction:column; line-height:1.2;}
+.win-name{font-size:14px; color:var(--ink-soft);}
+.act-fish{font-size:16px; margin-left:4px;}
 .win-time{font-size:18px; font-weight:800;}
 .win-rate{margin-left:auto; font-size:15px; font-weight:700; color:var(--copper-dark);}
 .win-empty{background:var(--bg); border-radius:16px; padding:12px 14px; font-size:15.5px; color:var(--ink-soft); line-height:1.45;}

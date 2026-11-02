@@ -63,7 +63,7 @@ async function renderDailyForecastStrip(){
     const wd = dayShort[new Date(d.date+'T12:00:00').getDay()];
     const fish = fc && fc.byDate[d.date] ? fc.byDate[d.date] : null;
     const fishHTML = fish
-      ? `<div class="df-fish" style="background:${scoreColor(fish.index)};" title="Indice di pesca ${fish.index}: ${fishingRating(fish.index)}">🎣 ${fish.index}</div><div class="df-rating" style="color:${scoreColor(fish.index)};">${fishingRating(fish.index)}</div>`
+      ? `<div class="df-fish" style="background:${activityColor(fish.activity)};" title="Attività solunare: ${SOLUNAR_DAY_NAMES[fish.activity]}">${fishIcons(fish.activity)}</div><div class="df-rating" style="color:${activityColor(fish.activity)};">${SOLUNAR_DAY_NAMES[fish.activity]}</div>`
       : '';
     return `<div class="df-day" ${fish ? `style="cursor:pointer;" onclick="openDayForecast('${d.date}')"` : ''}>
       <div class="df-name">${isToday?'Oggi':wd}</div>
@@ -143,9 +143,7 @@ async function renderConditionsCard(){
   const nowHour = nowDate.getHours() + nowDate.getMinutes()/60;
   const moon = moonPhaseForDate(todayStr, nowHour);
   const illum = moonIllumination(todayStr, nowHour);
-  const solunar = solunarPeriods(todayStr, spot.lat, spot.lng);
 
-  const solunarHTML = `<div class="solunar-row">${solunar.map(s=>`<span class="sol-tag ${s.kind}" title="${s.label}">🎣 ${s.range}${s.kind==='minor'?' ·min':''}</span>`).join('')}</div>`;
   const header = `<h3>Condizioni di oggi <span class="cond-note" style="cursor:pointer; text-decoration:underline;" onclick="openWeatherLocationModal()">📍 ${spotLabel} · cambia</span></h3>`;
   const moonCell = `<div class="cst"><div class="v">${moon.emoji}</div><div class="k">${moon.name}</div><div class="s">${illum}% illuminata</div></div>`;
   const tideFallback = estimateTide(todayStr, nowHour);
@@ -158,7 +156,6 @@ async function renderConditionsCard(){
         <div class="cst"><div class="v">…</div><div class="k">Meteo</div></div>
         <div class="cst"><div class="v">…</div><div class="k">Mare</div></div>
       </div>
-      ${solunarHTML}
     </div>`;
 
   let c = null;
@@ -182,7 +179,6 @@ async function renderConditionsCard(){
         ${tideCell}
         ${moonCell}
       </div>
-      ${solunarHTML}
       ${c && (c.sunrise || c.sunset) ? `<div class="sun-row"><span>🌅 alba ${c.sunrise||'—'}</span><span>🌇 tramonto ${c.sunset||'—'}</span></div>` : ''}
     </div>`;
 }

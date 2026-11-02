@@ -202,22 +202,70 @@ function moonEventsForDay(dateStr, lat, lng, utcOffsetH){
   return ev;
 }
 
-/* Periodi solunari (teoria amatoriale): "maggiori" ±1 h attorno al passaggio della Luna al meridiano
-   e al suo opposto, "minori" ±30 min attorno a sorgere e tramonto lunare. Calcolati alla longitudine reale. */
+/* Sorgere/tramonto lunari su tre giorni (ieri, oggi, domani) in ore dalla mezzanotte locale di dateStr,
+   ordinati nel tempo: servono per accoppiare gli eventi attorno alla mezzanotte. */
+function moonRiseSetSpan(dateStr, lat, lng, utcOffsetH){
+  const t0 = _localToMs(dateStr, 0, utcOffsetH) - 24 * 3600000;
+  const stepMs = 5 * 60000;
+  const steps = 72 * 12;
+  const sinLat = Math.sin(lat * DEG), cosLat = Math.cos(lat * DEG);
+  const H0 = 0.125;
+  const ev = [];
+  let prevAlt = null, prevMs = null;
+  for(let i=0; i<=steps; i++){
+    const ms = t0 + i*stepMs;
+    const jd = _jdFromMs(ms);
+    const eq = _moonEquatorial(jd);
+    const H = _norm360(_gmstDeg(jd) + lng - eq.ra);
+    const alt = Math.asin(sinLat*Math.sin(eq.dec*DEG) + cosLat*Math.cos(eq.dec*DEG)*Math.cos(H*DEG)) / DEG - H0;
+    if(prevAlt != null){
+      const frac = (0 - prevAlt) / (alt - prevAlt);
+      const hAt = (prevMs + frac * stepMs - (t0 + 24 * 3600000)) / 3600000;
+      if(prevAlt < 0 && alt >= 0) ev.push({type:'rise', h:hAt});
+      if(prevAlt >= 0 && alt < 0) ev.push({type:'set', h:hAt});
+    }
+    prevAlt = alt; prevMs = ms;
+  }
+  return ev;
+}
+
+/* Periodi solunari: "maggiori" ±1 h attorno al transito lunare (Luna sopra di noi) e al transito opposto, "minori" ±30 min
+   attorno a sorgere e tramonto lunare. Il transito è calcolato come fa MeteoPesca: punto medio fra sorgere e tramonto
+   della Luna (e per il transito opposto fra il tramonto e il sorgere successivo). Ogni periodo ha anche un livello di attività
+   1–4 (bassa, media, elevata, molto elevata), vedi solunarDayLevel. */
 function solunarPeriods(dateStr, lat, lng, utcOffsetH){
   if(lat == null || lng == null){ lat = SPOTORNO_COORDS.lat; lng = SPOTORNO_COORDS.lng; }
   if(utcOffsetH == null) utcOffsetH = deviceUtcOffsetH(dateStr);
-  const ev = moonEventsForDay(dateStr, lat, lng, utcOffsetH);
+  const span = moonRiseSetSpan(dateStr, lat, lng, utcOffsetH);
+  const dayLevel = solunarDayLevel(dateStr);
   const out = [];
-  const mk = (label, kind, c, w) => out.push({
-    label, kind, centerH:c, startH:c-w, endH:c+w,
+  const mk = (label, kind, c, w, level) => out.push({
+    label, kind, centerH:c, startH:c-w, endH:c+w, level,
     range: `${fmtHourMin(c-w)} – ${fmtHourMin(c+w)}`,
   });
-  ev.upper.forEach(c=> mk('Luna al meridiano', 'major', c, 1));
-  ev.lower.forEach(c=> mk('Luna opposta', 'major', c, 1));
-  ev.rise.forEach(c=> mk('Sorgere della Luna', 'minor', c, 0.5));
-  ev.set.forEach(c=> mk('Tramonto della Luna', 'minor', c, 0.5));
+  const inDay = h => h >= 0 && h < 24;
+  const majorLevel = Math.min(4, dayLevel + 1);
+  for(let i = 0; i < span.length; i++){
+    const e = span[i];
+    if(inDay(e.h)) mk(e.type === 'rise' ? 'Sorgere della Luna' : 'Tramonto della Luna', 'minor', e.h, 0.5, dayLevel);
+    const n = span[i + 1];
+    if(n && n.type !== e.type){
+      const mid = (e.h + n.h) / 2;
+      if(inDay(mid)) mk(e.type === 'rise' ? 'Luna al meridiano' : 'Luna opposta', 'major', mid, 1, majorLevel);
+    }
+  }
   return out.sort((a,b)=>a.centerH - b.centerH);
+}
+
+/* Livello di attività solunare del giorno, 1–4 (bassa, media, alta, molto alta), come nelle tavole di MeteoPesca:
+   dipende solo dall'età della Luna (numero del giorno lunare, 0–29) tramite una tabella fissa, ricavata confrontando
+   83 giorni di tavole di Spotorno (82 su 83 identici). I periodi maggiori valgono un livello in più (max 4), i minori il livello del giorno. */
+const SOLUNAR_DAY_TABLE = [4,4,3,2,1,2,3,3,3,1,2,2,2,3,4,4,3,2,1,2,3,3,2,1,2,2,3,3,4,4];
+const SOLUNAR_LEVEL_NAMES = {1:'bassa', 2:'media', 3:'elevata', 4:'molto elevata'};
+const SOLUNAR_DAY_NAMES = {1:'Bassa', 2:'Media', 3:'Alta', 4:'Molto alta'};
+function solunarDayLevel(dateStr){
+  const age = _moonElongation(_jdForDateHour(dateStr, 0)) / 360 * SYNODIC_DAYS + 0.5;
+  return SOLUNAR_DAY_TABLE[Math.floor(age) % 30];
 }
 
 /* peso solunare dell'ora [hour, hour+1): 2 = periodo maggiore, 1 = minore, 0 = nessuno (gestisce la mezzanotte) */
@@ -231,6 +279,17 @@ function solunarWeightForHour(periods, hour){
     });
   });
   return w;
+}
+
+/* livello di attività (1–4) del periodo solunare che copre l'ora [hour, hour+1), 0 se nessuno */
+function solunarLevelForHour(periods, hour){
+  let lv = 0;
+  periods.forEach(p=>{
+    [-24, 0, 24].forEach(shift=>{
+      if(p.startH + shift < hour + 1 && p.endH + shift > hour) lv = Math.max(lv, p.level || 0);
+    });
+  });
+  return lv;
 }
 
 /* Stima approssimativa della marea, usata SOLO come ripiego se il servizio dati non risponde
