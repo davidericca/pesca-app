@@ -38,6 +38,8 @@ function switchTab(name){
 
 /* ===================== DIARIO ===================== */
 
+let _dfState = null;   // ultimi dati caricati della striscia, per ridisegnarla al cambio vista
+
 async function renderDailyForecastStrip(){
   const box = document.getElementById('dailyForecastStrip');
   if(!box) return;
@@ -56,14 +58,24 @@ async function renderDailyForecastStrip(){
     box.innerHTML = `<div class="daily-forecast-card"><h3>Previsioni <span class="cond-note">${spotLabel}</span></h3><div class="pred-body" style="color:var(--ink-soft); font-size:12px;">Previsioni non disponibili al momento.</div></div>`;
     return;
   }
+  _dfState = {days, fc, spotLabel};
+  paintDailyForecastStrip();
+}
+
+/* striscia dei 7 giorni: l'attività dei pesci segue la vista scelta (MeteoPesca o analisi dell'app) */
+function paintDailyForecastStrip(){
+  const box = document.getElementById('dailyForecastStrip');
+  if(!box || !_dfState) return;
+  const {days, fc, spotLabel} = _dfState;
   const dayShort = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
   const todayStr = localDateStr();
   const cardsHTML = days.map(d=>{
     const isToday = d.date === todayStr;
     const wd = dayShort[new Date(d.date+'T12:00:00').getDay()];
     const fish = fc && fc.byDate[d.date] ? fc.byDate[d.date] : null;
+    const lv = fish ? dayActivityFor(fish, activityMode) : 0;
     const fishHTML = fish
-      ? `<div class="df-fish" style="background:${activityColor(fish.activity)};" title="Attività solunare: ${SOLUNAR_DAY_NAMES[fish.activity]}">${fishIcons(fish.activity)}</div><div class="df-rating" style="color:${activityColor(fish.activity)};">${SOLUNAR_DAY_NAMES[fish.activity]}</div>`
+      ? `<div class="df-fish" style="background:${activityColor(lv)};">${fishIcons(lv)}</div><div class="df-rating" style="color:${activityColor(lv)};">${ACT_DAY_NAMES[lv]}</div>`
       : '';
     return `<div class="df-day" ${fish ? `style="cursor:pointer;" onclick="openDayForecast('${d.date}')"` : ''}>
       <div class="df-name">${isToday?'Oggi':wd}</div>

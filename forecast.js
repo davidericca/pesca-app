@@ -15,7 +15,9 @@ let forecastActiveDate = null;
    Indice ORIENTATIVO costruito su regole generali della pesca da riva (luce, luna, pressione, vento, mare,
    meteo, marea), non su una misura scientifica: è una tendenza, non una garanzia. Somma di fattori pesati (100). */
 
-const FC_WEIGHTS = {luce:24, solunare:18, pressione:14, vento:16, mare:14, meteo:8, marea:6};
+/* peso dei fattori sull'attività dei pesci: luce, luna, pressione e correnti di marea decidono, vento/mare/meteo
+   aggiustano soltanto (non sono "sicurezza": un po' di onda o vento non abbassa il voto) */
+const FC_WEIGHTS = {luce:28, solunare:26, pressione:20, marea:10, vento:6, mare:6, meteo:4};
 const FC_LABELS = {luce:'Luce', solunare:'Luna/solunare', pressione:'Pressione', vento:'Vento', mare:'Mare', meteo:'Meteo', marea:'Marea'};
 const FC_NEUTRAL = 0.6; // fattore usato se il dato manca
 
@@ -46,24 +48,24 @@ function pressureFactor(trend){
   return 0.25;
 }
 
+/* Vento, mare e meteo sono valutati per l'ATTIVITÀ DEI PESCI, non per la comodità o la sicurezza di chi pesca:
+   un po' di vento e di moto ondoso tendono a stimolare l'alimentazione, mare piatto e aria ferma meno. */
 function windFactor(kmh){
   if(kmh == null) return FC_NEUTRAL;
-  if(kmh < 8) return 1;
-  if(kmh < 15) return 0.9;
-  if(kmh < 22) return 0.7;
-  if(kmh < 30) return 0.45;
-  if(kmh < 40) return 0.2;
-  return 0.05;
+  if(kmh < 5) return 0.8;
+  if(kmh < 25) return 1;
+  if(kmh < 35) return 0.85;
+  if(kmh < 45) return 0.7;
+  return 0.55;
 }
 
 function waveFactor(m){
   if(m == null) return FC_NEUTRAL;
-  if(m < 0.15) return 0.85;
-  if(m < 0.5) return 1;
-  if(m < 1.0) return 0.8;
-  if(m < 1.5) return 0.45;
-  if(m < 2.5) return 0.15;
-  return 0;
+  if(m < 0.15) return 0.7;
+  if(m < 0.5) return 0.9;
+  if(m < 1.5) return 1;
+  if(m < 2.5) return 0.85;
+  return 0.7;
 }
 
 function weatherFactor(code){
@@ -72,9 +74,9 @@ function weatherFactor(code){
   if(b === 'sereno') return 0.85;
   if(b === 'nuvoloso') return 1;
   if(b === 'nebbia') return 0.8;
-  if(b === 'pioggia') return [63,65,81,82].includes(code) ? 0.3 : 0.6;
-  if(b === 'temporale') return 0;
-  if(b === 'neve') return 0.2;
+  if(b === 'pioggia') return [63,65,81,82].includes(code) ? 0.6 : 0.9;
+  if(b === 'temporale') return 0.5;
+  if(b === 'neve') return 0.4;
   return 0.7;
 }
 
@@ -102,14 +104,8 @@ function fishingIndexForHour(rec, ctx){
   const parts = {};
   let sum = 0;
   Object.keys(FC_WEIGHTS).forEach(k=>{ parts[k] = Math.round(FC_WEIGHTS[k] * f[k] * 10) / 10; sum += FC_WEIGHTS[k] * f[k]; });
-  let score = Math.round(sum);
-  const warn = [];
-  if(rec.gust != null && rec.gust >= 50) warn.push('raffiche forti');
-  if(rec.wave != null && rec.wave >= 2.5) warn.push('mare agitato');
-  if(rec.code != null && [95,96,99].includes(rec.code)) warn.push('temporale');
-  if(warn.length) score = Math.min(score, 20);
-  else if(rec.wind != null && rec.wind >= 40){ warn.push('vento forte'); score = Math.min(score, 35); }
-  return {score, parts, warn};
+  /* nessun tetto "per sicurezza": l'indice misura l'attività dei pesci, non se conviene uscire */
+  return {score: Math.round(sum), parts, warn: []};
 }
 
 function fishingRating(score){
@@ -118,6 +114,9 @@ function fishingRating(score){
   if(score >= 40) return 'Discreto';
   return 'Scarso';
 }
+
+/* livello di attività 0–4 di un indice orario (scala fissa, non rapportata al resto della giornata) */
+function appActivityLevel(score){ return score >= 90 ? 4 : score >= 82 ? 3 : score >= 74 ? 2 : score >= 60 ? 1 : 0; }
 
 function scoreColor(score){ return `hsl(${Math.round(Math.max(0, Math.min(100, score)) * 1.15)}, 55%, 42%)`; }
 
@@ -245,6 +244,30 @@ function summarizeFishingDay(day){
     return {start, end, level: p.level, fish: p.level, kind: p.kind, name: SOLUNAR_PERIOD_NAMES[p.label] || p.label,
       label: `${fmtHourMin(Math.max(0, p.startH))}–${fmtHourMin(p.endH >= 24 ? p.endH - 24 : p.endH)}`};
   }).filter(w=>w.end > w.start).sort((a,b)=>a.start - b.start);
+
+  /* analisi dell'app: attività dei pesci ora per ora (luna + luce + pressione + vento + mare + meteo + marea).
+     Fasce = serie di ore vicine al massimo del giorno (e non sotto 60); il livello di ogni fascia è però assoluto. */
+  day.activityApp = Math.max(1, appActivityLevel(day.index));
+  const thr = day.maxScore < 60 ? Infinity : Math.max(60, day.maxScore - 12);
+  const apps = [];
+  let run = [];
+  const flush = ()=>{
+    if(!run.length) return;
+    const avg = Math.round(run.reduce((s,h)=>s + h.score, 0) / run.length);
+    const level = appActivityLevel(avg);
+    if(level > 0){
+      const start = run[0].hour, end = run[run.length - 1].hour + 1;
+      /* i due fattori che più la sostengono, per spiegare perché è una buona fascia */
+      const ratio = k => run.reduce((s,h)=>s + h.parts[k] / FC_WEIGHTS[k], 0) / run.length;
+      const why = ['luce','solunare','pressione','marea'].sort((a,b)=>ratio(b) - ratio(a)).slice(0, 2).map(k=>k === 'solunare' ? 'luna' : FC_LABELS[k].toLowerCase()).join(' · ');
+      apps.push({start, end, avg, level, fish: level, kind:'app', name: why, label: `${pad2(start)}:00–${pad2(end % 24)}:00`});
+    }
+    run = [];
+  };
+  day.hours.forEach(h=>{ if(h.score >= thr) run.push(h); else flush(); });
+  flush();
+  day.windowsApp = apps.sort((a,b)=>b.avg - a.avg).slice(0, 3).sort((a,b)=>a.start - b.start);
+
   const noon = day.hours.find(h=>h.hour === 12);
   day.icon = noon && noon.code != null ? weatherEmoji(noon.code) : '—';
 }
@@ -264,7 +287,8 @@ const FC_WEEKDAYS = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
 
 /* Grafico marea della giornata (SVG piatto): curva del livello del mare, alti/bassi con l'ora, alba e tramonto,
    ora attuale (solo oggi) e pesci sul fondo: più pesci = ore con indice di pesca più alto. */
-function tideChartHTML(day, isToday){
+function tideChartHTML(day, isToday, wins, bandLabel){
+  wins = wins || day.windows;
   const t = day.tide;
   if(!t) return '';
   const W = 360, H = 206, L = 38, R = 10, T = 36, B = 28;
@@ -288,7 +312,7 @@ function tideChartHTML(day, isToday){
   svg += `<rect x="${L}" y="${T}" width="${pw}" height="${pb - T}" class="tc-night"/>`;
   if(sr != null && ss != null) svg += `<rect x="${xOf(sr).toFixed(1)}" y="${T}" width="${(xOf(ss) - xOf(sr)).toFixed(1)}" height="${pb - T}" class="tc-day"/>`;
   /* periodi solunari: banda evidenziata, più scura se l'attività è più alta */
-  day.windows.forEach(w=>{
+  wins.forEach(w=>{
     svg += `<rect x="${xOf(w.start).toFixed(1)}" y="${T}" width="${(xOf(w.end) - xOf(w.start)).toFixed(1)}" height="${pb - T}" class="tc-band l${w.fish}"/>`;
   });
 
@@ -333,7 +357,7 @@ function tideChartHTML(day, isToday){
   /* pesci sul fondo, al centro di ogni periodo solunare: da 1 (bassa) a 4 (molto elevata), come MeteoPesca */
   const fish = (cx, cy, s) => `<g transform="translate(${cx.toFixed(1)} ${cy.toFixed(1)}) scale(${s})" class="tc-fish"><ellipse cx="-2" cy="0" rx="8" ry="4.5"/><path d="M4 0 L11 -5 L11 5Z"/></g>`;
   svg += `<text x="${L - 5}" y="${pb - 11}" class="tc-axis" text-anchor="end">pesca</text>`;
-  day.windows.forEach(w=>{
+  wins.forEach(w=>{
     const cx = xOf((w.start + w.end) / 2);
     for(let i = 0; i < w.fish; i++) svg += fish(cx + (i - (w.fish - 1) / 2) * 10.5, pb - 14, 0.56);
   });
@@ -345,29 +369,96 @@ function tideChartHTML(day, isToday){
   svg += `<line x1="${L}" x2="${W - R}" y1="${pb}" y2="${pb}" class="tc-base"/><line x1="${L}" x2="${L}" y1="${T}" y2="${pb}" class="tc-base"/></svg>`;
 
   return `<div class="tide-wrap">${svg}
-    <div class="tide-legend"><span><i class="tc-dot high"></i> alta</span><span><i class="tc-dot low"></i> bassa</span><span><i class="tc-swatch"></i> periodo solunare</span></div>
+    <div class="tide-legend"><span><i class="tc-dot high"></i> alta</span><span><i class="tc-dot low"></i> bassa</span><span><i class="tc-swatch"></i> ${bandLabel || 'periodo solunare'}</span></div>
     <div class="fc-note" style="margin-top:6px;">L'altezza parte da 0 = livello più basso della giornata. Marea da modello marino (Open-Meteo): in Mediterraneo l'escursione è di pochi decimetri e gli orari sono una stima, non quelli ufficiali.</div>
   </div>`;
 }
 
-/* attività solunare del giorno e dei suoi quattro periodi, come le tavole di MeteoPesca:
-   🐟 bassa, 🐟🐟 media, 🐟🐟🐟 elevata, 🐟🐟🐟🐟 molto elevata. Dipende dalla Luna, non dal meteo. */
-function windowListHTML(day, todayStr){
+/* Due analisi dell'attività dei pesci, affiancate in una scheda scorrevole:
+   - "mp" = MeteoPesca: solo Luna (attività solunare del giorno e dei quattro periodi)
+   - "app" = analisi dell'app: Luna + luce + pressione + vento + mare + meteo + marea, ora per ora
+   Livelli 1–4: 🐟 bassa, 🐟🐟 media, 🐟🐟🐟 elevata, 🐟🐟🐟🐟 molto elevata. */
+let activityMode = 'mp';
+try{ if(localStorage.getItem('pescaActivityMode') === 'app') activityMode = 'app'; }catch(e){}
+
+const ACT_DAY_NAMES = {1:'Bassa', 2:'Media', 3:'Alta', 4:'Molto alta'};
+const ACT_LEVEL_NAMES = {1:'Bassa', 2:'Media', 3:'Elevata', 4:'Molto elevata'};
+function dayActivityFor(day, mode){ return mode === 'app' ? day.activityApp : day.activity; }
+
+function windowListHTML(day, todayStr, mode){
   const nowH = new Date().getHours();
   const isToday = day.date === todayStr;
-  const rows = day.windows.map(w=>`
+  const wins = mode === 'app' ? day.windowsApp : day.windows;
+  if(!wins.length){
+    return `<div class="win-list"><div class="win-empty">Nessuna fascia davvero buona: l'indice più alto della giornata è ${day.maxScore}.</div></div>`;
+  }
+  const rows = wins.map(w=>`
     <div class="win-row l${w.level} ${isToday && w.end <= nowH ? 'past' : ''}">
       <span class="win-fish">${fishIcons(w.level)}</span>
       <span class="win-main"><b class="win-time">${w.label}</b><span class="win-name">${w.name}</span></span>
-      <span class="win-rate">${SOLUNAR_LEVEL_NAMES[w.level][0].toUpperCase() + SOLUNAR_LEVEL_NAMES[w.level].slice(1)}</span>
+      <span class="win-rate">${ACT_LEVEL_NAMES[w.level]}</span>
     </div>`).join('');
-  return `<div class="win-list">${rows}
-    <div class="fc-note" style="margin-top:2px;">Come nelle tavole di MeteoPesca: l'attività dipende dalla fase lunare (non dal meteo). 🐟 bassa · 🐟🐟 media · 🐟🐟🐟 elevata · 🐟🐟🐟🐟 molto elevata. I periodi maggiori valgono un livello in più dei minori.</div>
+  const note = mode === 'app'
+    ? `Analisi dell'app: unisce la Luna (come MeteoPesca) con luce, pressione, vento, mare, meteo e marea, ora per ora. Valuta l'attività dei pesci, non la comodità di pescare: un po' di onda e vento non abbassano il voto. Pesci su scala fissa, non rapportati al resto della giornata.`
+    : `Come nelle tavole di MeteoPesca: l'attività dipende solo dalla fase lunare. I periodi maggiori (transiti) valgono un livello in più dei minori (alba e tramonto lunari).`;
+  return `<div class="win-list">${rows}<div class="fc-note" style="margin-top:2px;">${note} 🐟 bassa · 🐟🐟 media · 🐟🐟🐟 elevata · 🐟🐟🐟🐟 molto elevata.</div></div>`;
+}
+
+function activityHeadHTML(day, mode){
+  const lv = dayActivityFor(day, mode);
+  return `<div class="fc-best" style="margin-top:0;"><b style="color:${activityColor(lv)};">Attività del giorno: ${ACT_DAY_NAMES[lv]}</b> <span class="act-fish">${fishIcons(lv)}</span></div>`;
+}
+
+/* scheda scorrevole a due pagine: curva della marea + fasce + elenco, per MeteoPesca e per l'analisi dell'app */
+function activityCarouselHTML(day, isToday, todayStr){
+  const slide = mode => `
+    <div class="act-slide" data-m="${mode}">
+      ${activityHeadHTML(day, mode)}
+      ${tideChartHTML(day, isToday, mode === 'app' ? day.windowsApp : day.windows, mode === 'app' ? 'fascia migliore' : 'periodo solunare')}
+      ${windowListHTML(day, todayStr, mode)}
+    </div>`;
+  return `<div class="act-wrap">
+    <div class="act-switch" role="tablist">
+      <button class="act-tab ${activityMode==='mp'?'active':''}" data-m="mp" onclick="actGo(this,'mp')">MeteoPesca</button>
+      <button class="act-tab ${activityMode==='app'?'active':''}" data-m="app" onclick="actGo(this,'app')">Analisi dell'app</button>
+    </div>
+    <div class="act-slider" onscroll="onActScroll(this)">${slide('mp')}${slide('app')}</div>
+    <div class="act-dots"><i class="${activityMode==='mp'?'on':''}"></i><i class="${activityMode==='app'?'on':''}"></i></div>
   </div>`;
 }
 
-function activityHeadHTML(day){
-  return `<div class="fc-best" style="margin-top:0;"><b style="color:${activityColor(day.activity)};">Attività del giorno: ${SOLUNAR_DAY_NAMES[day.activity]}</b> <span class="act-fish">${fishIcons(day.activity)}</span></div>`;
+function actSnap(root){
+  (root || document).querySelectorAll('.act-wrap').forEach(w=>{
+    const sl = w.querySelector('.act-slider');
+    if(sl && sl.clientWidth) sl.scrollLeft = activityMode === 'app' ? sl.clientWidth : 0;
+  });
+}
+function actGo(btn, mode){
+  const sl = btn.closest('.act-wrap').querySelector('.act-slider');
+  sl.scrollTo({left: mode === 'app' ? sl.clientWidth : 0, behavior: 'smooth'});
+}
+function onActScroll(sl){
+  if(!sl.clientWidth) return;
+  const i = sl.scrollLeft / sl.clientWidth > 0.5 ? 1 : 0, mode = i ? 'app' : 'mp';
+  const wrap = sl.closest('.act-wrap');
+  wrap.querySelectorAll('.act-tab').forEach(b=>b.classList.toggle('active', b.dataset.m === mode));
+  wrap.querySelectorAll('.act-dots i').forEach((d, k)=>d.classList.toggle('on', k === i));
+  clearTimeout(sl._t);
+  sl._t = setTimeout(()=>{ if(mode !== activityMode) setActivityMode(mode); }, 120);
+}
+function setActivityMode(mode){
+  activityMode = mode;
+  try{ localStorage.setItem('pescaActivityMode', mode); }catch(e){}
+  if(typeof paintDailyForecastStrip === 'function') paintDailyForecastStrip();
+  /* gli altri riquadri a pagine restano sulla stessa vista */
+  document.querySelectorAll('.act-wrap').forEach(w=>{
+    const sl = w.querySelector('.act-slider');
+    if(sl && Math.round(sl.scrollLeft / (sl.clientWidth || 1)) !== (mode === 'app' ? 1 : 0)) sl.scrollLeft = mode === 'app' ? sl.clientWidth : 0;
+  });
+  document.querySelectorAll('.fc-day .x').forEach(x=>{
+    const d = x.closest('.fc-day').dataset.date;
+    if(d && hourlyForecastData && hourlyForecastData.byDate[d]) x.textContent = fishIcons(dayActivityFor(hourlyForecastData.byDate[d], mode));
+  });
 }
 
 /* scheda della home: marea di oggi con le fasce di pesca migliori */
@@ -387,10 +478,9 @@ async function renderTodayTideCard(){
   box.innerHTML = `
     <div class="conditions-card">
       <h3>Marea e fasce di pesca <span class="cond-note">${day.date === todayStr ? 'oggi' : fmtDate(day.date)}</span></h3>
-      ${activityHeadHTML(day)}
-      ${tideChartHTML(day, day.date === todayStr)}
-      ${windowListHTML(day, todayStr)}
+      ${activityCarouselHTML(day, day.date === todayStr, todayStr)}
     </div>`;
+  actSnap(box);
 }
 
 function forecastDayHTML(fc, date){
@@ -403,15 +493,13 @@ function forecastDayHTML(fc, date){
   const head = `
     <div class="fc-head">
       <div class="fc-sun">🌅 ${day.sunrise||'—'} · 🌇 ${day.sunset||'—'} · ${day.moon.emoji} ${day.moon.name} ${day.moonIllum}%</div>
-      <div style="margin-top:8px;">${activityHeadHTML(day)}</div>
-      ${tideChartHTML(day, date === todayStr)}
-      ${windowListHTML(day, todayStr)}
+      ${activityCarouselHTML(day, date === todayStr, todayStr)}
       ${profile ? '' : `<div class="fc-note">Registra qualche uscita in più con GPS per vedere anche le ore simili ai tuoi giorni migliori (⭐).</div>`}
     </div>`;
 
   const rows = day.hours.map(h=>{
     const past = date === todayStr && h.hour < nowHour;
-    const isTop = day.windows.some(w=>w.kind === 'major' && h.hour >= w.start && h.hour < w.end);
+    const isTop = day.windowsApp.some(w=>h.hour >= w.start && h.hour < w.end);
     const match = personalHourMatch(h, profile, day.moon.name);
     const star = match != null && match >= 0.67;
     const trend = pressureTrendInfo(h.pTrend);
@@ -471,9 +559,9 @@ async function renderHourlyForecastPanel(){
   const chips = fc.dates.map(d=>{
     const day = fc.byDate[d];
     const wd = FC_WEEKDAYS[new Date(d + 'T12:00:00').getDay()];
-    return `<button class="fc-day ${d===forecastActiveDate?'active':''}" onclick="setForecastDay('${d}')">
+    return `<button class="fc-day ${d===forecastActiveDate?'active':''}" data-date="${d}" onclick="setForecastDay('${d}')">
       <span class="w">${d===todayStr ? 'Oggi' : wd}</span><span class="n">${parseInt(d.slice(8,10),10)}</span>
-      <span class="i">${day.icon}</span><span class="x" title="Attività solunare: ${SOLUNAR_DAY_NAMES[day.activity]}">${fishIcons(day.activity)}</span>
+      <span class="i">${day.icon}</span><span class="x">${fishIcons(dayActivityFor(day, activityMode))}</span>
     </button>`;
   }).join('');
   panel.innerHTML = `
@@ -481,6 +569,7 @@ async function renderHourlyForecastPanel(){
       <div class="fc-days">${chips}</div>
       ${forecastDayHTML(fc, forecastActiveDate)}
     </div>`;
+  actSnap(panel);
 }
 
 function setForecastDay(date){
@@ -497,6 +586,7 @@ async function openDayForecast(date){
   try{
     const fc = await getForecastData();
     box.innerHTML = forecastDayHTML(fc, date);
+    actSnap(box);
   }catch(e){
     box.innerHTML = `<div class="pred-body" style="color:var(--ink-soft); font-size:12px;">Previsioni orarie non disponibili al momento.</div>`;
   }
