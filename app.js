@@ -584,19 +584,9 @@ function openGalleryPhoto(id){
 }
 
 function renderDiario(){
-  const summary = document.getElementById('summaryStrip');
-
-  const totalW = data.catches.reduce((s,c)=> s + (parseFloat(c.weight)||0), 0);
-  const speciesCaught = new Set(data.catches.map(c=>c.speciesId)).size;
-  summary.innerHTML = `
-    <div class="summary-card"><div class="num">${data.catches.length}</div><div class="lbl">Catture</div></div>
-    <div class="summary-card"><div class="num">${speciesCaught}</div><div class="lbl">Specie</div></div>
-    <div class="summary-card"><div class="num">${totalW.toFixed(1)}</div><div class="lbl">Kg totali</div></div>
-  `;
-
   renderDashboard();
-  renderConditionsCard();
   renderTodayTideCard();
+  renderConditionsCard();
   renderDailyForecastStrip();
   renderPrediction();
   renderDiarioFilterPanel();
