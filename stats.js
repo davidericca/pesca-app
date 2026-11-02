@@ -256,8 +256,8 @@ function renderAnalysis(){
   if(chartByYear) chartByYear.destroy();
   chartByYear = new Chart(ctxY, {
     type:'line',
-    data:{ labels: a.years, datasets:[{ data: a.years.map(y=>a.yearCounts[y]), borderColor:'#1C6E8C', backgroundColor:'rgba(28,110,140,0.15)', fill:true, tension:0.3, pointBackgroundColor:'#1C6E8C' }]},
-    options:{ plugins:{legend:{display:false}}, scales:{ y:{beginAtZero:true, ticks:{precision:0,color:'#5B6660'}, grid:{color:'#E3D6BC'}}, x:{ticks:{color:'#5B6660'}, grid:{display:false}} } }
+    data:{ labels: a.years, datasets:[{ data: a.years.map(y=>a.yearCounts[y]), borderColor:'#2F6DB5', backgroundColor:'rgba(47,109,181,0.15)', fill:true, tension:0.3, pointBackgroundColor:'#2F6DB5' }]},
+    options:{ plugins:{legend:{display:false}}, scales:{ y:{beginAtZero:true, ticks:{precision:0,color:'#5B6B7F'}, grid:{color:'#DDE6F0'}}, x:{ticks:{color:'#5B6B7F'}, grid:{display:false}} } }
   });
 
   const insights = [];
@@ -651,12 +651,12 @@ function renderStats(){
     type:'bar',
     data:{
       labels: sortedSp.map(s=>s[0]),
-      datasets:[{ data: sortedSp.map(s=>s[1]), backgroundColor:'#C97C3D', borderRadius:6 }]
+      datasets:[{ data: sortedSp.map(s=>s[1]), backgroundColor:'#F29B38', borderRadius:6 }]
     },
     options:{
       indexAxis:'y',
       plugins:{legend:{display:false}},
-      scales:{ x:{beginAtZero:true, ticks:{precision:0, color:'#5B6660'}, grid:{color:'#E3D6BC'}}, y:{ticks:{color:'#1B2420', font:{size:11}}, grid:{display:false}} }
+      scales:{ x:{beginAtZero:true, ticks:{precision:0, color:'#5B6B7F'}, grid:{color:'#DDE6F0'}}, y:{ticks:{color:'#14202E', font:{size:11}}, grid:{display:false}} }
     }
   });
 

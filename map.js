@@ -47,7 +47,7 @@ function renderMap(){
   currentSpots = buildSpots(getFilteredCatchesForMap());
   currentSpots.forEach(spot=>{
     const stat = spotStats(spot);
-    const color = stat.dominantSpeciesId ? speciesColorFor(stat.dominantSpeciesId) : '#5B6660';
+    const color = stat.dominantSpeciesId ? speciesColorFor(stat.dominantSpeciesId) : '#5B6B7F';
     const label = stat.count > 1 ? stat.count : '🎣';
     const icon = L.divIcon({
       html: `<div style="width:30px;height:30px;border-radius:50%;background:${color};border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;color:#fff;font-family:var(--font-mono);font-weight:700;font-size:${stat.count>1?'13px':'14px'};">${label}</div>`,

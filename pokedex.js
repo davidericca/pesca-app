@@ -158,7 +158,7 @@ function showUnlockAnimation(speciesId){
     <div class="unlock-name">${s.name}</div>
   `;
   const confettiLayer = document.getElementById('confettiLayer');
-  const colors = ['#C97C3D','#1C6E8C','#4C7A5E','#EFE6D5','#A85A28'];
+  const colors = ['#F29B38','#2F6DB5','#2E9D6B','#9CBFE3','#8A5200'];
   confettiLayer.innerHTML = Array.from({length:26}).map(()=>{
     const left = Math.random()*100;
     const delay = Math.random()*0.4;
