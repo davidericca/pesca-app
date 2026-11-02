@@ -115,6 +115,7 @@ function selectWeatherLocation(place){
   toast('Meteo impostato su ' + place.name);
   hourlyForecastData = null;
   renderConditionsCard();
+  renderTodayTideCard();
   renderDailyForecastStrip();
   if(hourlyForecastOpen) renderHourlyForecastPanel();
 }
@@ -126,6 +127,7 @@ function resetWeatherLocation(){
   toast('Tornato al comportamento automatico');
   hourlyForecastData = null;
   renderConditionsCard();
+  renderTodayTideCard();
   renderDailyForecastStrip();
   if(hourlyForecastOpen) renderHourlyForecastPanel();
 }
@@ -594,6 +596,7 @@ function renderDiario(){
 
   renderDashboard();
   renderConditionsCard();
+  renderTodayTideCard();
   renderDailyForecastStrip();
   renderPrediction();
   renderDiarioFilterPanel();

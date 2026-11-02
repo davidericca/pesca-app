@@ -222,27 +222,33 @@ function tideDayData(mh, allExtrema, date){
   return {pts, extrema};
 }
 
-/* indice della giornata = media delle 6 ore migliori; finestre = serie di ore vicine al massimo */
+/* Pesci di una fascia: scala FISSA sull'indice assoluto (stessa degli aggettivi Ottimo/Buono/Discreto), mai
+   rapportata alle altre ore della giornata: in un giorno poco attivo la fascia migliore ha 1 pesce o nessuno. */
+function fishLevel(score){ return score >= 75 ? 3 : score >= 60 ? 2 : score >= 40 ? 1 : 0; }
+
+/* indice della giornata = media delle 6 ore migliori; fasce = serie di ore vicine al massimo del giorno
+   (e comunque almeno "discrete", indice >= 40); il voto di ogni fascia è però assoluto */
 function summarizeFishingDay(day){
   const sorted = [...day.hours].sort((a,b)=>b.score - a.score);
   const top = sorted.slice(0, 6);
   day.index = Math.round(top.reduce((s,h)=>s + h.score, 0) / top.length);
   const max = sorted[0].score;
-  const thr = Math.max(55, Math.round(max * 0.9));
+  day.maxScore = max;
+  const thr = max < 40 ? Infinity : Math.max(40, max - 12);
   day.thr = thr;
   const windows = [];
-  let start = null;
-  day.hours.forEach((h, i)=>{
-    const ok = h.score >= thr;
-    if(ok && start === null) start = h.hour;
-    const last = i === day.hours.length - 1;
-    if(start !== null && (!ok || last)){
-      const end = ok ? h.hour : day.hours[i-1].hour;
-      windows.push(`${pad2(start)}:00–${pad2(end + 1)}:00`);
-      start = null;
-    }
-  });
-  day.windows = windows;
+  let run = [];
+  const flush = ()=>{
+    if(!run.length) return;
+    const avg = Math.round(run.reduce((s,h)=>s + h.score, 0) / run.length);
+    const start = run[0].hour, end = run[run.length - 1].hour + 1;
+    windows.push({start, end, avg, fish: fishLevel(avg), label: `${pad2(start)}:00–${pad2(end)}:00`});
+    run = [];
+  };
+  day.hours.forEach(h=>{ if(h.score >= thr) run.push(h); else flush(); });
+  flush();
+  /* al massimo le 3 fasce più attive (poi in ordine di orario) */
+  day.windows = windows.sort((a,b)=>b.avg - a.avg).slice(0, 3).sort((a,b)=>a.start - b.start);
   const noon = day.hours.find(h=>h.hour === 12);
   day.icon = noon && noon.code != null ? weatherEmoji(noon.code) : '—';
 }
@@ -285,6 +291,10 @@ function tideChartHTML(day, isToday){
   let svg = `<svg class="tide-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Grafico della marea della giornata">`;
   svg += `<rect x="${L}" y="${T}" width="${pw}" height="${pb - T}" class="tc-night"/>`;
   if(sr != null && ss != null) svg += `<rect x="${xOf(sr).toFixed(1)}" y="${T}" width="${(xOf(ss) - xOf(sr)).toFixed(1)}" height="${pb - T}" class="tc-day"/>`;
+  /* fasce di pesca migliori: banda evidenziata, più scura se l'attività è più alta */
+  day.windows.forEach(w=>{
+    svg += `<rect x="${xOf(w.start).toFixed(1)}" y="${T}" width="${(xOf(w.end) - xOf(w.start)).toFixed(1)}" height="${pb - T}" class="tc-band l${w.fish}"/>`;
+  });
 
   for(let k = 0; k * step <= hi + 1e-9; k++){
     const v = k * step, y = yOf(base + v).toFixed(1);
@@ -324,18 +334,13 @@ function tideChartHTML(day, isToday){
     svg += `<text x="${x.toFixed(1)}" y="${(e.type === 'high' ? y - 9 : y + 17).toFixed(1)}" class="tc-time ${e.type}" text-anchor="middle">${fmtHourMin(e.hour)}</text>`;
   });
 
-  /* pesci: uno per ogni blocco di 2 ore, in fila sul fondo. Grande = ore migliori della giornata, piccolo = ore discrete,
-     nessun pesce = ore poco buone. Stessa soglia dell'indice di pesca delle finestre migliori. */
-  const byHour = {};
-  day.hours.forEach(h=>{ byHour[h.hour] = h.score; });
-  const fish = (cx, cy, s, cls) => `<g transform="translate(${cx.toFixed(1)} ${cy.toFixed(1)}) scale(${s})" class="tc-fish ${cls}"><ellipse cx="-2" cy="0" rx="8" ry="4.5"/><path d="M4 0 L11 -5 L11 5Z"/></g>`;
+  /* pesci sul fondo, al centro di ogni fascia: 3 = attività ottima, 2 = buona, 1 = discreta (scala fissa) */
+  const fish = (cx, cy, s) => `<g transform="translate(${cx.toFixed(1)} ${cy.toFixed(1)}) scale(${s})" class="tc-fish"><ellipse cx="-2" cy="0" rx="8" ry="4.5"/><path d="M4 0 L11 -5 L11 5Z"/></g>`;
   svg += `<text x="${L - 5}" y="${pb - 11}" class="tc-axis" text-anchor="end">pesca</text>`;
-  for(let b = 0; b < 24; b += 2){
-    const sc = Math.max(byHour[b] ?? 0, byHour[b + 1] ?? 0);
-    const cx = xOf(b + 1), cy = pb - 14;
-    if(sc >= day.thr) svg += fish(cx, cy, 1.05, 'big');
-    else if(sc >= Math.max(50, day.thr - 15)) svg += fish(cx, cy, 0.78, 'small');
-  }
+  day.windows.forEach(w=>{
+    const cx = xOf((w.start + w.end) / 2);
+    for(let i = 0; i < w.fish; i++) svg += fish(cx + (i - (w.fish - 1) / 2) * 12.5, pb - 14, 0.64);
+  });
 
   if(isToday){
     const now = new Date(), nh = now.getHours() + now.getMinutes() / 60, x = xOf(nh).toFixed(1);
@@ -344,9 +349,50 @@ function tideChartHTML(day, isToday){
   svg += `<line x1="${L}" x2="${W - R}" y1="${pb}" y2="${pb}" class="tc-base"/><line x1="${L}" x2="${L}" y1="${T}" y2="${pb}" class="tc-base"/></svg>`;
 
   return `<div class="tide-wrap">${svg}
-    <div class="tide-legend"><span><i class="tc-dot high"></i> alta</span><span><i class="tc-dot low"></i> bassa</span><span>🐟 grande = ore migliori, piccolo = discrete</span></div>
+    <div class="tide-legend"><span><i class="tc-dot high"></i> alta</span><span><i class="tc-dot low"></i> bassa</span><span><i class="tc-swatch"></i> fascia di pesca</span></div>
     <div class="fc-note" style="margin-top:6px;">L'altezza parte da 0 = livello più basso della giornata. Marea da modello marino (Open-Meteo): in Mediterraneo l'escursione è di pochi decimetri e gli orari sono una stima, non quelli ufficiali.</div>
   </div>`;
+}
+
+/* elenco delle fasce migliori con i pesci: scala fissa 🐟🐟🐟 ottima (75+), 🐟🐟 buona (60–74), 🐟 discreta (40–59) */
+function windowListHTML(day, todayStr){
+  const nowH = new Date().getHours();
+  const isToday = day.date === todayStr;
+  if(!day.windows.length){
+    return `<div class="win-list"><div class="win-empty">Giornata poco attiva: l'indice più alto è ${day.maxScore} (${fishingRating(day.maxScore).toLowerCase()}), nessuna fascia davvero buona.</div></div>`;
+  }
+  const rows = day.windows.map(w=>`
+    <div class="win-row l${w.fish} ${isToday && w.end <= nowH ? 'past' : ''}">
+      <span class="win-fish">${'🐟'.repeat(w.fish)}</span>
+      <b class="win-time">${w.label}</b>
+      <span class="win-rate">${fishingRating(w.avg)}</span>
+    </div>`).join('');
+  return `<div class="win-list">${rows}
+    <div class="fc-note" style="margin-top:2px;">Pesci su scala fissa, non rapportati al resto della giornata: 🐟🐟🐟 ottima (indice 75+), 🐟🐟 buona (60–74), 🐟 discreta (40–59).</div>
+  </div>`;
+}
+
+/* scheda della home: marea di oggi con le fasce di pesca migliori */
+async function renderTodayTideCard(){
+  const box = document.getElementById('todayTideCard');
+  if(!box) return;
+  box.innerHTML = `<div class="conditions-card"><h3>Marea e fasce di pesca <span class="cond-note">oggi</span></h3><div class="pred-body" style="color:var(--ink-soft); font-size:15px;">Carico...</div></div>`;
+  let fc;
+  try{ fc = await getForecastData(); }
+  catch(e){
+    box.innerHTML = `<div class="conditions-card"><h3>Marea e fasce di pesca <span class="cond-note">oggi</span></h3><div class="pred-body" style="color:var(--ink-soft); font-size:15px;">Previsioni non disponibili al momento.</div></div>`;
+    return;
+  }
+  const todayStr = localDateStr();
+  const day = fc.byDate[todayStr] || fc.byDate[fc.dates[0]];
+  if(!day){ box.innerHTML = ''; return; }
+  box.innerHTML = `
+    <div class="conditions-card">
+      <h3>Marea e fasce di pesca <span class="cond-note">${day.date === todayStr ? 'oggi' : fmtDate(day.date)}</span></h3>
+      <div class="fc-best" style="margin-top:0;"><b style="color:${scoreColor(day.index)};">Indice ${day.index} · ${fishingRating(day.index)}</b></div>
+      ${tideChartHTML(day, day.date === todayStr)}
+      ${windowListHTML(day, todayStr)}
+    </div>`;
 }
 
 function forecastDayHTML(fc, date){
@@ -361,14 +407,15 @@ function forecastDayHTML(fc, date){
     <div class="fc-head">
       <div class="fc-sun">🌅 ${day.sunrise||'—'} · 🌇 ${day.sunset||'—'} · ${day.moon.emoji} ${day.moon.name} ${day.moonIllum}%</div>
       <div class="solunar-row" style="margin-top:8px;">${solunarTags}</div>
+      <div class="fc-best"><b style="color:${scoreColor(day.index)};">Indice ${day.index} · ${fishingRating(day.index)}</b></div>
       ${tideChartHTML(day, date === todayStr)}
-      <div class="fc-best"><b style="color:${scoreColor(day.index)};">Indice ${day.index} · ${fishingRating(day.index)}</b>${day.windows.length ? ' — finestre migliori: ' + day.windows.join(', ') : ' — nessuna finestra davvero buona'}</div>
+      ${windowListHTML(day, todayStr)}
       ${profile ? '' : `<div class="fc-note">Registra qualche uscita in più con GPS per vedere anche le ore simili ai tuoi giorni migliori (⭐).</div>`}
     </div>`;
 
   const rows = day.hours.map(h=>{
     const past = date === todayStr && h.hour < nowHour;
-    const isTop = day.windows.some(w=>{ const [a,b] = w.split('–'); return h.hour >= parseInt(a,10) && h.hour < parseInt(b,10); });
+    const isTop = day.windows.some(w=>h.hour >= w.start && h.hour < w.end);
     const match = personalHourMatch(h, profile, day.moon.name);
     const star = match != null && match >= 0.67;
     const trend = pressureTrendInfo(h.pTrend);

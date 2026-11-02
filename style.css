@@ -507,15 +507,30 @@ nav.tabbar{
 .tide-chart .tc-time{font-family:var(--font-body); font-size:11.5px; font-weight:800;}
 .tide-chart .tc-time.high{fill:#2F6DB5;}
 .tide-chart .tc-time.low{fill:#C2503C;}
-.tide-chart .tc-fish{fill:#6F95AB; opacity:.75;}
+.tide-chart .tc-fish{fill:#2F6DB5;}
+.tide-chart .tc-band{fill:#F29B38;}
+.tide-chart .tc-band.l3{opacity:.36;}
+.tide-chart .tc-band.l2{opacity:.26;}
+.tide-chart .tc-band.l1{opacity:.16;}
+.tide-legend .tc-swatch{display:inline-block; width:14px; height:10px; border-radius:3px; background:rgba(242,155,56,.45); margin-right:4px;}
 .tide-chart .tc-now{stroke:#2E9D6B; stroke-width:2; opacity:.85;}
 .tide-chart .tc-nowtri{fill:#2E9D6B;}
 .tide-legend{display:flex; gap:14px; flex-wrap:wrap; font-size:13.5px; color:var(--ink-soft); margin-top:4px;}
 .tide-legend i{display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:4px;}
-.tide-chart .tc-fish.big{fill:#2F6DB5; opacity:.95;}
-.tide-chart .tc-fish.small{fill:#9CBFE3; opacity:.95;}
 .tide-chart .tc-tick{stroke:var(--ink); stroke-width:1.2;}
 
 /* barre di scorrimento orizzontali nascoste */
 .pokedex-filters, .fc-days, .daily-forecast-strip{scrollbar-width:none;}
 .pokedex-filters::-webkit-scrollbar, .fc-days::-webkit-scrollbar, .daily-forecast-strip::-webkit-scrollbar{display:none;}
+
+/* fasce di pesca migliori */
+.win-list{display:flex; flex-direction:column; gap:8px; margin-top:12px;}
+.win-row{display:flex; align-items:center; gap:12px; background:var(--bg); border-radius:16px; padding:10px 14px; border-left:5px solid var(--copper);}
+.win-row.l3{background:rgba(242,155,56,0.20);}
+.win-row.l2{background:rgba(242,155,56,0.12);}
+.win-row.l1{background:var(--bg);}
+.win-row.past{opacity:.5;}
+.win-fish{font-size:17px; min-width:58px; letter-spacing:1px;}
+.win-time{font-size:18px; font-weight:800;}
+.win-rate{margin-left:auto; font-size:15px; font-weight:700; color:var(--copper-dark);}
+.win-empty{background:var(--bg); border-radius:16px; padding:12px 14px; font-size:15.5px; color:var(--ink-soft); line-height:1.45;}
