@@ -550,3 +550,21 @@ nav.tabbar{
 .act-dots{display:flex; justify-content:center; gap:7px; margin-top:12px;}
 .act-dots i{width:8px; height:8px; border-radius:50%; background:#C5D3E3; transition:width .2s, background .2s;}
 .act-dots i.on{width:22px; border-radius:6px; background:var(--teal-deep);}
+
+/* grafico marea: nuovo disegno (curva sfumata, niente pesci) */
+.tide-chart .tc-night{fill:#E1E9F3;}
+.tide-chart .tc-day{fill:#F6F9FD;}
+.tide-chart .tc-grid{stroke:rgba(20,32,46,.09); stroke-width:1;}
+.tide-chart .tc-zero{stroke:rgba(20,32,46,.32); stroke-width:1.2; stroke-dasharray:4 3;}
+.tide-chart .tc-base{stroke:rgba(20,32,46,.35); stroke-width:1.2;}
+.tide-chart .tc-curve{fill:none; stroke:#2F6DB5; stroke-width:3; stroke-linecap:round; stroke-linejoin:round;}
+.tide-chart .tc-sunline{stroke:#E0A22E; stroke-width:1.2; stroke-dasharray:2 4; opacity:.75;}
+.tide-chart .tc-sun{fill:#E0A22E;}
+.tide-chart .tc-sunlabel{fill:#8A5200; font-family:var(--font-body); font-size:11px; font-weight:700;}
+.tide-chart .tc-dot{stroke:#fff; stroke-width:2;}
+.tide-chart .tc-time{font-family:var(--font-body); font-size:11px; font-weight:800;}
+.tide-chart .tc-h{font-size:10px; font-weight:600; fill:var(--ink-soft);}
+.tide-chart .tc-now{stroke:#2E9D6B; stroke-width:1.6; stroke-dasharray:3 3; opacity:.9;}
+.tide-chart .tc-nowdot{fill:#2E9D6B; stroke:#fff; stroke-width:2;}
+.tide-chart .tc-tick{stroke:rgba(20,32,46,.4); stroke-width:1;}
+.tide-chart .tc-axis{font-size:10.5px;}

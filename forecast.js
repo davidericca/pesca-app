@@ -148,8 +148,14 @@ async function buildFishingForecast(loc){
   const mJ = mRes.status === 'fulfilled' ? mRes.value : null;
   if(!wJ && !mJ) throw new Error('previsioni non disponibili');
 
-  const wh = wJ && wJ.hourly, mh = mJ && mJ.hourly;
+  const wh = wJ && wJ.hourly;
+  let mh = mJ && mJ.hourly;
   const times = (wh && wh.time) || (mh && mh.time) || [];
+  /* marea calcolata (come le tavole di MeteoPesca) quando il punto è in Riviera; anche se il servizio marino non risponde */
+  if(tideHarmonicApplies(loc.lat, loc.lng)){
+    if(!mh) mh = {time: times.slice(), sea_level_height_msl: []};
+    applyHarmonicTide(mh, loc.lat, loc.lng);
+  }
   const mIdx = new Map(mh ? mh.time.map((t,i)=>[t,i]) : []);
   const today = localDateStr();
   const sunByDate = {};
@@ -208,6 +214,7 @@ async function buildFishingForecast(loc){
 /* livello del mare di un giorno per il grafico: un punto all'ora (0–24) e i massimi/minimi che cadono in quel giorno */
 function tideDayData(mh, allExtrema, date){
   if(!mh || !mh.sea_level_height_msl) return null;
+  if(mh._harmonic) return harmonicDaySeries(date);
   const pts = [];
   for(let h = 0; h <= 24; h++){
     const v = sampleHourly(mh, 'sea_level_height_msl', date, h);
@@ -285,60 +292,56 @@ async function getForecastData(){
 
 const FC_WEEKDAYS = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
 
-/* Grafico marea della giornata (SVG piatto): curva del livello del mare, alti/bassi con l'ora, alba e tramonto,
-   ora attuale (solo oggi) e pesci sul fondo: più pesci = ore con indice di pesca più alto. */
+/* Grafico della marea della giornata (SVG): curva con area sfumata, alti e bassi con ora e altezza, alba e tramonto,
+   ora attuale (solo oggi) e fasce di pesca evidenziate (più scure = attività più alta; i pesci sono nell'elenco sotto).
+   Altezze in metri sul livello di riferimento delle tavole di MeteoPesca. */
+let _tcSeq = 0;
 function tideChartHTML(day, isToday, wins, bandLabel){
   wins = wins || day.windows;
   const t = day.tide;
   if(!t) return '';
-  const W = 360, H = 206, L = 38, R = 10, T = 36, B = 28;
+  const uid = 'tc' + (++_tcSeq);
+  const W = 360, H = 200, L = 34, R = 12, T = 38, B = 26;
   const pw = W - L - R, pb = H - B;
-  const dataTop = T + 12, dataBot = pb - 38;            // la fascia sotto è per i pesci
+  const dataTop = T + 22, dataBot = pb - 8;
   const xOf = h => L + h / 24 * pw;
 
-  /* altezza misurata dal livello più basso della giornata (0): il livello assoluto del modello non è affidabile,
-     le differenze nell'arco della giornata sì */
-  const lv = t.pts.map(p=>p[1]).concat(t.extrema.map(e=>e.level));
-  const base = Math.min(...lv);
-  const range = Math.max(...lv) - base;
-  const top = Math.max(0.4, Math.ceil((range + 0.05) * 10) / 10);
-  const step = top <= 0.6 ? 0.1 : top <= 1.2 ? 0.2 : 0.5;
-  const lo = -top * 0.12, hi = top * 1.05;
-  const yOf = v => dataBot - (v - base - lo) / (hi - lo) * (dataBot - dataTop);
-  const fmtM = v => v.toFixed(1).replace('.', ',');
+  /* con la marea calcolata le altezze sono metri sul livello di riferimento; col modello Open-Meteo (fuori zona)
+     il livello assoluto non è affidabile e si parte dal minimo del giorno */
+  const levels = t.pts.map(p=>p[1]).concat(t.extrema.map(e=>e.level));
+  const rel = t.harmonic ? 0 : Math.min(...levels);
+  const mn = Math.min(...levels) - rel, mx = Math.max(...levels) - rel;
+  const step = (mx - mn) > 0.7 ? 0.2 : 0.1;
+  const lo = Math.floor((mn - 0.03) / step) * step;
+  let hi = Math.ceil((mx + 0.03) / step) * step;
+  if(hi - lo < 0.3) hi = lo + 0.3;
+  const yOf = v => dataBot - (v - rel - lo) / (hi - lo) * (dataBot - dataTop);
+  const fmtM = v => (Math.abs(v) < 1e-9 ? 0 : v).toFixed(1).replace('.', ',');
+  const levelAt = h => {
+    const i = Math.max(0, Math.min(t.pts.length - 2, Math.floor(h / 24 * (t.pts.length - 1))));
+    const p0 = t.pts[i], p1 = t.pts[i + 1], f = p1[0] === p0[0] ? 0 : (h - p0[0]) / (p1[0] - p0[0]);
+    return p0[1] + (p1[1] - p0[1]) * Math.max(0, Math.min(1, f));
+  };
 
   const sr = hhmmToHours(day.sunrise), ss = hhmmToHours(day.sunset);
   let svg = `<svg class="tide-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Grafico della marea della giornata">`;
+  svg += `<defs>
+    <linearGradient id="${uid}-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2F6DB5" stop-opacity="0.34"/><stop offset="1" stop-color="#2F6DB5" stop-opacity="0.03"/></linearGradient>
+    <clipPath id="${uid}-clip"><rect x="${L}" y="${T}" width="${pw}" height="${pb - T}" rx="12"/></clipPath>
+  </defs>`;
+
+  svg += `<g clip-path="url(#${uid}-clip)">`;
   svg += `<rect x="${L}" y="${T}" width="${pw}" height="${pb - T}" class="tc-night"/>`;
   if(sr != null && ss != null) svg += `<rect x="${xOf(sr).toFixed(1)}" y="${T}" width="${(xOf(ss) - xOf(sr)).toFixed(1)}" height="${pb - T}" class="tc-day"/>`;
-  /* periodi solunari: banda evidenziata, più scura se l'attività è più alta */
+  /* fasce di pesca: banda evidenziata, più scura se l'attività è più alta */
   wins.forEach(w=>{
-    svg += `<rect x="${xOf(w.start).toFixed(1)}" y="${T}" width="${(xOf(w.end) - xOf(w.start)).toFixed(1)}" height="${pb - T}" class="tc-band l${w.fish}"/>`;
+    svg += `<rect x="${xOf(w.start).toFixed(1)}" y="${T}" width="${(xOf(w.end) - xOf(w.start)).toFixed(1)}" height="${pb - T}" class="tc-band l${w.level}"/>`;
   });
-
-  for(let k = 0; k * step <= hi + 1e-9; k++){
-    const v = k * step, y = yOf(base + v).toFixed(1);
-    svg += `<line x1="${L}" x2="${W - R}" y1="${y}" y2="${y}" class="${k === 0 ? 'tc-zero' : 'tc-grid'}"/>`;
-    svg += `<text x="${L - 5}" y="${(+y + 3.5).toFixed(1)}" class="tc-axis" text-anchor="end">${fmtM(v)}</text>`;
+  for(let v = Math.ceil(lo / step - 1e-9) * step; v <= hi + 1e-9; v += step){
+    const y = yOf(v + rel).toFixed(1);
+    svg += `<line x1="${L}" x2="${W - R}" y1="${y}" y2="${y}" class="${Math.abs(v) < 1e-9 && t.harmonic ? 'tc-zero' : 'tc-grid'}"/>`;
   }
-  svg += `<text x="${L - 5}" y="${T - 6}" class="tc-axis" text-anchor="end">m</text>`;
-  /* una tacchetta ogni ora (più lunga ogni 2), con l'ora scritta ogni 2 ore */
-  for(let h = 0; h <= 24; h++){
-    const x = xOf(h).toFixed(1), even = h % 2 === 0;
-    svg += `<line x1="${x}" x2="${x}" y1="${pb}" y2="${pb + (even ? 6 : 3.5)}" class="tc-tick"/>`;
-    if(even) svg += `<text x="${x}" y="${H - 8}" class="tc-axis" text-anchor="middle">${h}</text>`;
-  }
-
-  const sun = (h, label, up) => {
-    const x = xOf(h).toFixed(1);
-    return `<line x1="${x}" x2="${x}" y1="${T}" y2="${pb}" class="tc-sunline"/>
-      <path d="M${x - 4} ${T - 20} a4 4 0 0 1 8 0Z" class="tc-sun"/>
-      <path d="${up ? `M${x - 3} ${T - 26} l3 -4 l3 4Z` : `M${x - 3} ${T - 28} l3 4 l3 -4Z`}" class="tc-sun"/>
-      <text x="${x}" y="${T - 4}" class="tc-sunlabel" text-anchor="middle">${label}</text>`;
-  };
-  if(sr != null) svg += sun(sr, day.sunrise, true);
-  if(ss != null) svg += sun(ss, day.sunset, false);
-
+  /* curva con area sfumata sotto */
   const P = t.pts.map(p=>[xOf(p[0]), yOf(p[1])]);
   let d = `M${P[0][0].toFixed(1)} ${P[0][1].toFixed(1)}`;
   for(let i = 0; i < P.length - 1; i++){
@@ -346,31 +349,54 @@ function tideChartHTML(day, isToday, wins, bandLabel){
     d += ` C${(p1[0] + (p2[0] - p0[0]) / 6).toFixed(1)} ${(p1[1] + (p2[1] - p0[1]) / 6).toFixed(1)},`
        + `${(p2[0] - (p3[0] - p1[0]) / 6).toFixed(1)} ${(p2[1] - (p3[1] - p1[1]) / 6).toFixed(1)},${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`;
   }
+  svg += `<path d="${d} L${P[P.length - 1][0].toFixed(1)} ${pb} L${P[0][0].toFixed(1)} ${pb} Z" fill="url(#${uid}-fill)"/>`;
   svg += `<path d="${d}" class="tc-curve"/>`;
+  svg += `</g>`;
 
+  /* asse a sinistra (metri) e cornice */
+  for(let v = Math.ceil(lo / step - 1e-9) * step; v <= hi + 1e-9; v += step){
+    svg += `<text x="${L - 6}" y="${(yOf(v + rel) + 3.5).toFixed(1)}" class="tc-axis" text-anchor="end">${fmtM(v)}</text>`;
+  }
+  svg += `<text x="${L - 6}" y="${T - 6}" class="tc-axis" text-anchor="end">m</text>`;
+
+  /* ore: una tacchetta ogni ora, il numero ogni 3 */
+  for(let h = 0; h <= 24; h++){
+    const x = xOf(h).toFixed(1), big = h % 3 === 0;
+    svg += `<line x1="${x}" x2="${x}" y1="${pb}" y2="${pb + (big ? 5 : 3)}" class="tc-tick"/>`;
+    if(big) svg += `<text x="${x}" y="${H - 6}" class="tc-axis" text-anchor="middle">${h}</text>`;
+  }
+
+  /* alba e tramonto sopra il grafico */
+  const sun = (h, label, up) => {
+    const x = xOf(h).toFixed(1);
+    return `<line x1="${x}" x2="${x}" y1="${T}" y2="${pb}" class="tc-sunline"/>
+      <path d="${up ? `M${x - 4.5} ${T - 14} l4.5 -6 l4.5 6Z` : `M${x - 4.5} ${T - 20} l4.5 6 l4.5 -6Z`}" class="tc-sun"/>
+      <text x="${x}" y="${T - 4}" class="tc-sunlabel" text-anchor="middle">${label}</text>`;
+  };
+  if(sr != null) svg += sun(sr, day.sunrise, true);
+  if(ss != null) svg += sun(ss, day.sunset, false);
+
+  /* alte e basse: punto, ora e altezza */
   t.extrema.forEach(e=>{
     const x = xOf(e.hour), y = yOf(e.level);
-    svg += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4.5" class="tc-dot ${e.type}"/>`;
-    svg += `<text x="${x.toFixed(1)}" y="${(e.type === 'high' ? y - 9 : y + 17).toFixed(1)}" class="tc-time ${e.type}" text-anchor="middle">${fmtHourMin(e.hour)}</text>`;
-  });
-
-  /* pesci sul fondo, al centro di ogni periodo solunare: da 1 (bassa) a 4 (molto elevata), come MeteoPesca */
-  const fish = (cx, cy, s) => `<g transform="translate(${cx.toFixed(1)} ${cy.toFixed(1)}) scale(${s})" class="tc-fish"><ellipse cx="-2" cy="0" rx="8" ry="4.5"/><path d="M4 0 L11 -5 L11 5Z"/></g>`;
-  svg += `<text x="${L - 5}" y="${pb - 11}" class="tc-axis" text-anchor="end">pesca</text>`;
-  wins.forEach(w=>{
-    const cx = xOf((w.start + w.end) / 2);
-    for(let i = 0; i < w.fish; i++) svg += fish(cx + (i - (w.fish - 1) / 2) * 10.5, pb - 14, 0.56);
+    const lx = Math.min(Math.max(x, L + 30), W - R - 30);
+    svg += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5" class="tc-dot ${e.type}"/>`;
+    const ty = e.type === 'high' ? y - 11 : y + 20;
+    svg += `<text x="${lx.toFixed(1)}" y="${ty.toFixed(1)}" class="tc-time ${e.type}" text-anchor="middle">${fmtHourMin(e.hour)}<tspan class="tc-h" dx="4">${fmtM(e.level - rel)} m</tspan></text>`;
   });
 
   if(isToday){
     const now = new Date(), nh = now.getHours() + now.getMinutes() / 60, x = xOf(nh).toFixed(1);
-    svg += `<line x1="${x}" x2="${x}" y1="${T}" y2="${pb}" class="tc-now"/><path d="M${x - 5} ${T} h10 l-5 7Z" class="tc-nowtri"/>`;
+    svg += `<line x1="${x}" x2="${x}" y1="${T}" y2="${pb}" class="tc-now"/><circle cx="${x}" cy="${yOf(levelAt(nh)).toFixed(1)}" r="4.5" class="tc-nowdot"/>`;
   }
-  svg += `<line x1="${L}" x2="${W - R}" y1="${pb}" y2="${pb}" class="tc-base"/><line x1="${L}" x2="${L}" y1="${T}" y2="${pb}" class="tc-base"/></svg>`;
+  svg += `<line x1="${L}" x2="${W - R}" y1="${pb}" y2="${pb}" class="tc-base"/></svg>`;
 
+  const note = t.harmonic
+    ? `Altezze in metri sul livello di riferimento delle tavole di MeteoPesca. Marea calcolata dalle loro tavole di Spotorno: orari entro pochi minuti, altezze ±7 cm. Non valida per la navigazione.`
+    : `Altezza misurata dal livello più basso della giornata. Marea da modello marino (Open-Meteo): in Mediterraneo l'escursione è di pochi decimetri e gli orari sono una stima, non quelli ufficiali.`;
   return `<div class="tide-wrap">${svg}
     <div class="tide-legend"><span><i class="tc-dot high"></i> alta</span><span><i class="tc-dot low"></i> bassa</span><span><i class="tc-swatch"></i> ${bandLabel || 'periodo solunare'}</span></div>
-    <div class="fc-note" style="margin-top:6px;">L'altezza parte da 0 = livello più basso della giornata. Marea da modello marino (Open-Meteo): in Mediterraneo l'escursione è di pochi decimetri e gli orari sono una stima, non quelli ufficiali.</div>
+    <div class="fc-note" style="margin-top:6px;">${note}</div>
   </div>`;
 }
 

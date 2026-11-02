@@ -292,6 +292,106 @@ function solunarLevelForHour(periods, hour){
   return lv;
 }
 
+/* ===================== MAREA ARMONICA (Riviera ligure) =====================
+   Il modello marino di Open-Meteo non risolve bene le maree del Mediterraneo (orari sfasati fino a ~1,5 h).
+   Per Spotorno e dintorni la marea è quindi calcolata con 16 componenti armoniche (M2, S2, N2, K2, K1, O1...) ricavate
+   confrontando 24 mesi (2025-2026) di tavole di marea di MeteoPesca per Spotorno: scarto medio sugli orari di alta e bassa
+   circa 4 minuti (90% entro 10), provato anche su un anno non usato per ricavarle (4 minuti). Le altezze sono in metri sul livello di
+   riferimento delle loro tavole (bassa marea media inferiore) e valgono ±7 cm. Fuori dalla Riviera si usa il modello Open-Meteo. */
+const TIDE_EPOCH_MS = Date.UTC(2025, 0, 1);
+const TIDE_Z0 = 0.14530;
+const TIDE_CONSTITUENTS = [   // [velocità °/h, a, b]  h = Z0 + Σ a·cos(ωt) + b·sin(ωt), t in ore dal 1/1/2025 UTC
+  [28.9841042, -0.00879, -0.07698],  // M2
+  [30,         -0.00276, -0.03305],  // S2
+  [28.4397295, -0.01667,  0.00338],  // N2
+  [30.0821373,  0.00496,  0.00865],  // K2
+  [15.0410686, -0.00529, -0.00340],  // K1
+  [13.9430356,  0.00205, -0.00258],  // O1
+  [14.9589314, -0.00045, -0.00218],  // P1
+  [13.3986609, -0.00046, -0.00195],  // Q1
+  [57.9682084,  0.00105,  0.00539],  // M4
+  [58.9841042,  0.00179,  0.00065],  // MS4
+  [27.8953548,  0.00051,  0.00273],  // 2N2
+  [27.9682084, -0.00161, -0.00527],  // MU2
+  [28.5125831,  0.00308,  0.00068],  // NU2
+  [29.5284789, -0.00234, -0.00150],  // L2
+  [29.9589333, -0.00025, -0.00156],  // T2
+  [15.5854433, -0.00001, -0.00032],  // J1
+];
+
+function harmonicTideAtMs(ms){
+  const t = (ms - TIDE_EPOCH_MS) / 3600000;
+  let h = TIDE_Z0;
+  for(const c of TIDE_CONSTITUENTS){
+    const ph = ((c[0] * t) % 360) * DEG;
+    h += c[1] * Math.cos(ph) + c[2] * Math.sin(ph);
+  }
+  return h;
+}
+
+/* la marea armonica vale entro ~100 km da Spotorno */
+function tideHarmonicApplies(lat, lng){
+  if(lat == null || lng == null) return false;
+  const R = 6371, dLat = (lat - SPOTORNO_COORDS.lat) * DEG, dLng = (lng - SPOTORNO_COORDS.lng) * DEG;
+  const a = Math.sin(dLat/2)**2 + Math.cos(SPOTORNO_COORDS.lat*DEG) * Math.cos(lat*DEG) * Math.sin(dLng/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(a)) <= 100;
+}
+
+/* ora legale italiana: dall'ultima domenica di marzo all'ultima di ottobre, alle 01:00 UTC */
+function _lastSundayUtcMs(y, month0){
+  const d = new Date(Date.UTC(y, month0 + 1, 0, 1));
+  while(d.getUTCDay() !== 0) d.setUTCDate(d.getUTCDate() - 1);
+  return d.getTime();
+}
+function _romeOffsetAtUtc(ms){
+  const y = new Date(ms).getUTCFullYear();
+  return (ms >= _lastSundayUtcMs(y, 2) && ms < _lastSundayUtcMs(y, 9)) ? 2 : 1;
+}
+function _romeNaiveToUtc(naiveMs){
+  const u2 = naiveMs - 2 * 3600000;
+  return _romeOffsetAtUtc(u2) === 2 ? u2 : naiveMs - 3600000;
+}
+
+/* Sovrascrive il livello del mare di una serie oraria Open-Meteo con la marea armonica (se il punto è in zona). */
+function applyHarmonicTide(h, lat, lng){
+  if(!h || !h.time || !tideHarmonicApplies(lat, lng)) return h;
+  h.sea_level_height_msl = h.time.map(t=>harmonicTideAtMs(_romeNaiveToUtc(_naiveMs(t))));
+  h._harmonic = true;
+  return h;
+}
+
+/* serie oraria sintetica (solo marea) per un intervallo di date locali, quando il servizio marino non risponde */
+function harmonicHourly(startDate, endDate){
+  const time = [];
+  for(let d = startDate; d <= endDate; d = addDaysStr(d, 1)) for(let hh = 0; hh < 24; hh++) time.push(`${d}T${pad2(hh)}:00`);
+  return applyHarmonicTide({time, sea_level_height_msl: []}, SPOTORNO_COORDS.lat, SPOTORNO_COORDS.lng);
+}
+
+/* Curva e punti di alta/bassa di un giorno locale (ore 0–24) dalla marea armonica, passo di 15 minuti. */
+function harmonicDaySeries(dateStr){
+  const t0 = _romeNaiveToUtc(_naiveMs(dateStr + 'T00:00'));
+  const pts = [];
+  for(let q = 0; q <= 96; q++) pts.push([q / 4, harmonicTideAtMs(t0 + q * 900000)]);
+  const extrema = [];
+  const stepH = 5 / 60;
+  let prev = null;
+  for(let m = -60; m <= 24 * 60 + 60; m += 5){
+    const ms = t0 + m * 60000;
+    const a = harmonicTideAtMs(ms - 300000), b = harmonicTideAtMs(ms), c = harmonicTideAtMs(ms + 300000);
+    const isMax = b > a && b >= c, isMin = b < a && b <= c;
+    if(!isMax && !isMin) continue;
+    const denom = a - 2*b + c;
+    const off = denom !== 0 ? 0.5 * (a - c) / denom : 0;
+    const hour = (m + off * 5) / 60;
+    if(hour < 0 || hour >= 24) continue;
+    const type = isMax ? 'high' : 'low';
+    if(prev && prev.type === type) continue;
+    prev = {type, level: b - 0.25 * (a - c) * off, hour};
+    extrema.push(prev);
+  }
+  return {pts, extrema, harmonic: true};
+}
+
 /* Stima approssimativa della marea, usata SOLO come ripiego se il servizio dati non risponde
    (NON è un dato ufficiale: modello semi-diurno semplificato basato sul transito lunare). */
 function estimateTide(dateStr, hour){
@@ -445,8 +545,12 @@ async function fetchConditionsAt(lat, lng, dateStr, timeStr){
 
   const [wRes, mRes] = await Promise.allSettled([cachedJson(wUrl), cachedJson(mUrl)]);
   const wJ = wRes.status === 'fulfilled' ? wRes.value : null;
-  const mJ = mRes.status === 'fulfilled' ? mRes.value : null;
+  let mJ = mRes.status === 'fulfilled' ? mRes.value : null;
   if(!wJ && !mJ) throw new Error('meteo e mare non disponibili');
+  if(tideHarmonicApplies(lat, lng)){
+    if(!mJ) mJ = {hourly: harmonicHourly(start, end)};
+    else applyHarmonicTide(mJ.hourly, lat, lng);
+  }
 
   const out = {
     at: dateStr + 'T' + fmtHourMin(hourFloat), approx,
